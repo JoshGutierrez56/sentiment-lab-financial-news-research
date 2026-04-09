@@ -1,0 +1,17 @@
+# News-Sentiment Algorithmic Trading System
+# Python >= 3.10
+
+# Core data
+pandas>=2.0
+numpy>=1.24
+
+# HTTP + retry
+requests>=2.31
+urllib3>=2.0
+
+# Environment / config
+python-dotenv>=1.0    # optional: loads .env files automatically
+
+# Testing
+pytest>=7.4
+pytest-cov>=4.0
