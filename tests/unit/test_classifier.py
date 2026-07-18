@@ -12,7 +12,11 @@ import pytest
 from conftest import make_article, make_assessment
 from sentiment_lab.config.models import OpenAIConfig
 from sentiment_lab.nlp.cache import ClassificationCache
-from sentiment_lab.nlp.classifier import ArticleClassifier, contains_contradictory_information
+from sentiment_lab.nlp.classifier import (
+    ArticleClassifier,
+    ClassificationTarget,
+    contains_contradictory_information,
+)
 from sentiment_lab.nlp.openai_client import (
     BatchExecution,
     BatchFailure,
@@ -156,6 +160,27 @@ def test_classifier_never_reclassifies_identical_content(tmp_path: Path) -> None
     assert first.final_records[0].cache_key == second.final_records[0].cache_key
     assert second.summary()["cache_hits"] == 1
     assert second.summary()["total_cost_usd"] == 0
+
+
+def test_classifier_batches_multiple_tickers_without_cross_binding(tmp_path: Path) -> None:
+    apple = make_article(article_id="a" * 64, title="Apple launches a new product")
+    microsoft = make_article(article_id="m" * 64, title="Microsoft launches a new product")
+    gateway = FakeBatchGateway([apple, microsoft], lambda item, _: _assessment(item))
+    classifier = _classifier(tmp_path, gateway)
+    targets = [
+        ClassificationTarget(apple, "AAPL.US", "Apple Inc."),
+        ClassificationTarget(microsoft, "MSFT.US", "Microsoft Corporation"),
+    ]
+    result = classifier.classify_targets(
+        targets,
+        prompt_variant="evidence_v2",
+        budget_limit_usd=2.0,
+    )
+
+    assert gateway.stage_calls == [("first_pass", "gpt-5.4-mini", 2)]
+    assert [record.ticker for record in result.final_records] == ["AAPL.US", "MSFT.US"]
+    assert result.final_records[0].cache_key != result.final_records[1].cache_key
+    assert len(classifier.batch_custom_ids(targets, prompt_variant="evidence_v2")) == 4
 
 
 def test_expensive_escalation_waits_for_complete_first_pass(tmp_path: Path) -> None:
@@ -372,7 +397,11 @@ class FakeOpenAISDK:
     def _retrieve_batch(self, _: str) -> object:
         return self._batch()
 
-    def _content(self, _: str) -> object:
+    def _content(self, file_id: str) -> object:
+        if file_id == "file_input":
+            return SimpleNamespace(
+                text="\n".join(json.dumps(request) for request in self.uploaded_requests)
+            )
         output_lines = []
         for request in reversed(self.uploaded_requests):
             body = {
@@ -459,6 +488,15 @@ def test_batch_adapter_uses_compact_schema_exact_cost_and_resume(tmp_path: Path)
     assert second.calls["request-1"].assessment == first.calls["request-1"].assessment
     assert sdk.upload_count == 1
     assert sdk.batch_create_count == 1
+    audit = client.audit_saved_batch_usage({"request-1"})
+    assert audit["batch_count"] == 1
+    assert audit["request_attempts"] == 1
+    assert audit["first_pass_request_attempts"] == 1
+    assert audit["unique_first_pass_articles"] == 1
+    assert audit["unique_escalated_articles"] == 0
+    assert audit["structured_output_failures"] == 0
+    assert audit["actual_api_cost_usd"] == pytest.approx(0.00056625)
+    assert audit["largest_batch_preflight_maximum_usd"] > audit["actual_api_cost_usd"]
 
 
 def test_batch_budget_preflight_stops_before_upload(tmp_path: Path) -> None:

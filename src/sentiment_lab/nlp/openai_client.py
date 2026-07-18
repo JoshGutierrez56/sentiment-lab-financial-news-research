@@ -188,6 +188,113 @@ class OpenAIBatchClient:
             estimated_cost_usd=cost * self.config.regional_processing_multiplier,
         )
 
+    def audit_saved_batch_usage(self, custom_ids: set[str]) -> dict[str, int | float]:
+        """Reconcile billed usage across completed original and repair batches.
+
+        A cached rerun has zero *new* cost, but its experiment still incurred the
+        original calls. Scanning immutable Batch output files also captures malformed
+        structured outputs that consumed tokens before a successful repair.
+        """
+
+        totals: dict[str, int | float] = {
+            "batch_count": 0,
+            "request_attempts": 0,
+            "first_pass_request_attempts": 0,
+            "escalation_request_attempts": 0,
+            "unique_first_pass_articles": 0,
+            "unique_escalated_articles": 0,
+            "structured_output_failures": 0,
+            "input_tokens": 0,
+            "cached_input_tokens": 0,
+            "output_tokens": 0,
+            "reasoning_tokens": 0,
+            "actual_api_cost_usd": 0.0,
+            "preflight_maximum_estimated_cost_usd_all_attempts": 0.0,
+            "largest_batch_preflight_maximum_usd": 0.0,
+        }
+        if not custom_ids or not self.state_root.is_dir():
+            return totals
+        unique_by_stage: dict[str, set[str]] = {"first_pass": set(), "escalation": set()}
+        for state_path in sorted(self.state_root.glob("*.json")):
+            state = json.loads(state_path.read_text(encoding="utf-8"))
+            state_ids = {str(value) for value in state.get("custom_ids") or []}
+            relevant = state_ids & custom_ids
+            output_file_id = state.get("output_file_id")
+            model = str(state.get("model") or "")
+            stage = str(state.get("stage") or "")
+            if not relevant or state.get("status") != "completed" or not output_file_id:
+                continue
+            input_file_id = state.get("input_file_id")
+            batch_maximum = 0.0
+            if input_file_id:
+                input_response = self._safe_api_call(
+                    lambda input_file_id=input_file_id: self.client.files.content(input_file_id),
+                    f"Could not audit saved OpenAI input {input_file_id}",
+                )
+                pricing = self._pricing(model)
+                for line in self._file_text(input_response).splitlines():
+                    if not line.strip():
+                        continue
+                    try:
+                        request = json.loads(line)
+                    except json.JSONDecodeError:
+                        continue
+                    if str(request.get("custom_id") or "") not in relevant:
+                        continue
+                    body = request.get("body") or {}
+                    input_upper_bound = (
+                        len(stable_json(body).encode("utf-8"))
+                        + self.config.input_token_estimate_overhead
+                    )
+                    max_output_tokens = int(body.get("max_output_tokens") or 0)
+                    batch_maximum += (
+                        input_upper_bound * pricing.input_per_million
+                        + max_output_tokens * pricing.output_per_million
+                    ) / 1_000_000.0
+                batch_maximum *= self.config.regional_processing_multiplier
+                totals["preflight_maximum_estimated_cost_usd_all_attempts"] += batch_maximum
+                totals["largest_batch_preflight_maximum_usd"] = max(
+                    float(totals["largest_batch_preflight_maximum_usd"]), batch_maximum
+                )
+            response = self._safe_api_call(
+                lambda output_file_id=output_file_id: self.client.files.content(output_file_id),
+                f"Could not audit saved OpenAI output {output_file_id}",
+            )
+            totals["batch_count"] += 1
+            for line in self._file_text(response).splitlines():
+                if not line.strip():
+                    continue
+                try:
+                    result = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+                if str(result.get("custom_id") or "") not in relevant:
+                    continue
+                wrapper = result.get("response") or {}
+                if wrapper.get("status_code") != 200:
+                    continue
+                body = wrapper.get("body") or {}
+                usage = self._usage(body, model)
+                totals["request_attempts"] += 1
+                if stage in unique_by_stage:
+                    totals[f"{stage}_request_attempts"] += 1
+                    unique_by_stage[stage].add(str(result.get("custom_id")))
+                totals["input_tokens"] += usage.input_tokens
+                totals["cached_input_tokens"] += usage.cached_input_tokens
+                totals["output_tokens"] += usage.output_tokens
+                totals["reasoning_tokens"] += usage.reasoning_tokens
+                totals["actual_api_cost_usd"] += usage.estimated_cost_usd
+                output_text = self._output_text(body)
+                try:
+                    if output_text is None:
+                        raise ValueError("missing structured output")
+                    ArticleAssessment.model_validate_json(output_text)
+                except (ValidationError, ValueError):
+                    totals["structured_output_failures"] += 1
+        totals["unique_first_pass_articles"] = len(unique_by_stage["first_pass"])
+        totals["unique_escalated_articles"] = len(unique_by_stage["escalation"])
+        return totals
+
     @staticmethod
     def _output_text(body: dict[str, Any]) -> str | None:
         for output in body.get("output") or []:
@@ -396,6 +503,15 @@ class OpenAIBatchClient:
         )
         batch = self._wait(batch, input_file_id, state_path)
         status = str(batch.status)
+        state = json.loads(state_path.read_text(encoding="utf-8"))
+        state.update(
+            {
+                "status": status,
+                "output_file_id": getattr(batch, "output_file_id", None),
+                "updated_at": datetime.now(UTC).isoformat(),
+            }
+        )
+        self._write_json_atomic(state_path, state)
         if status != "completed":
             raise OpenAIClassificationError(
                 f"OpenAI batch {batch.id} ended with status {status}; it will not be resubmitted"

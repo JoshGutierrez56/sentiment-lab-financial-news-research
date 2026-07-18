@@ -1,0 +1,42 @@
+name: diversified_250_validation
+news_start: 2025-11-01
+news_end: 2026-06-12
+articles_per_company: 10
+max_articles: 250
+news_candidate_pool_per_company: 200
+horizons: [1, 3, 5, 21]
+neutral_return_bps: 10.0
+random_seed: 20260718
+prompt_variant: evidence_v2
+spending_limit_tier: bounded_validation
+frozen_snapshot_id: b2ab96dc53588be1
+minimum_months: 3
+minimum_sectors: 8
+minimum_event_buckets: 6
+bootstrap_samples: 2000
+universe:
+  - {ticker: AAPL.US, company_name: Apple Inc., sector: Technology, aliases: [Apple, iPhone, Mac]}
+  - {ticker: MSFT.US, company_name: Microsoft Corporation, sector: Technology, aliases: [Microsoft, Azure, Windows]}
+  - {ticker: NVDA.US, company_name: NVIDIA Corporation, sector: Technology, aliases: [NVIDIA, Nvidia]}
+  - {ticker: GOOGL.US, company_name: Alphabet Inc., sector: Communication Services, aliases: [Alphabet, Google]}
+  - {ticker: META.US, company_name: Meta Platforms Inc., sector: Communication Services, aliases: [Meta, Facebook, Instagram]}
+  - {ticker: DIS.US, company_name: The Walt Disney Company, sector: Communication Services, aliases: [Disney, ESPN]}
+  - {ticker: AMZN.US, company_name: Amazon.com Inc., sector: Consumer Discretionary, aliases: [Amazon, AWS]}
+  - {ticker: TSLA.US, company_name: Tesla Inc., sector: Consumer Discretionary, aliases: [Tesla]}
+  - {ticker: HD.US, company_name: The Home Depot Inc., sector: Consumer Discretionary, aliases: [Home Depot]}
+  - {ticker: WMT.US, company_name: Walmart Inc., sector: Consumer Staples, aliases: [Walmart]}
+  - {ticker: KO.US, company_name: The Coca-Cola Company, sector: Consumer Staples, aliases: [Coca-Cola, Coca Cola]}
+  - {ticker: JPM.US, company_name: JPMorgan Chase & Co., sector: Financials, aliases: [JPMorgan, JPMorgan Chase]}
+  - {ticker: BAC.US, company_name: Bank of America Corporation, sector: Financials, aliases: [Bank of America]}
+  - {ticker: GS.US, company_name: The Goldman Sachs Group Inc., sector: Financials, aliases: [Goldman Sachs]}
+  - {ticker: JNJ.US, company_name: Johnson & Johnson, sector: Health Care, aliases: [Johnson & Johnson, J&J]}
+  - {ticker: UNH.US, company_name: UnitedHealth Group Incorporated, sector: Health Care, aliases: [UnitedHealth, UnitedHealthcare]}
+  - {ticker: LLY.US, company_name: Eli Lilly and Company, sector: Health Care, aliases: [Eli Lilly, Lilly]}
+  - {ticker: CAT.US, company_name: Caterpillar Inc., sector: Industrials, aliases: [Caterpillar]}
+  - {ticker: GE.US, company_name: GE Aerospace, sector: Industrials, aliases: [GE Aerospace, General Electric]}
+  - {ticker: BA.US, company_name: The Boeing Company, sector: Industrials, aliases: [Boeing]}
+  - {ticker: XOM.US, company_name: Exxon Mobil Corporation, sector: Energy, aliases: [Exxon, ExxonMobil]}
+  - {ticker: CVX.US, company_name: Chevron Corporation, sector: Energy, aliases: [Chevron]}
+  - {ticker: NEE.US, company_name: NextEra Energy Inc., sector: Utilities, aliases: [NextEra Energy]}
+  - {ticker: LIN.US, company_name: Linde plc, sector: Materials, aliases: [Linde]}
+  - {ticker: PLD.US, company_name: Prologis Inc., sector: Real Estate, aliases: [Prologis]}

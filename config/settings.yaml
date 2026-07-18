@@ -32,6 +32,7 @@ openai:
       output_per_million: 7.50
   spending_limits_usd:
     smoke: 1.0
+    bounded_validation: 2.0
     first_research_sample: 5.0
     expanded_validation: 20.0
 storage:

@@ -13,6 +13,7 @@ from sentiment_lab.config.models import (
     ExperimentConfig,
     RuntimeSecrets,
     SentimentConfig,
+    ValidationExperimentConfig,
 )
 
 ModelT = TypeVar("ModelT", bound=BaseModel)
@@ -52,3 +53,7 @@ def load_sentiment_config(path: str | Path = "config/sentiment.yaml") -> Sentime
 
 def load_experiment_config(path: str | Path) -> ExperimentConfig:
     return load_yaml(path, ExperimentConfig)
+
+
+def load_validation_experiment_config(path: str | Path) -> ValidationExperimentConfig:
+    return load_yaml(path, ValidationExperimentConfig)

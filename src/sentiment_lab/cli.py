@@ -13,16 +13,19 @@ from sentiment_lab.config.loader import (
     load_app_config,
     load_experiment_config,
     load_sentiment_config,
+    load_validation_experiment_config,
 )
 from sentiment_lab.config.models import (
     AppConfig,
     ExperimentConfig,
     RuntimeSecrets,
     SentimentConfig,
+    ValidationExperimentConfig,
 )
 from sentiment_lab.data.cache import RawResponseCache
 from sentiment_lab.data.eodhd_client import EODHDClient, EODHDError
 from sentiment_lab.experiments.runner import MilestoneRunner, sync_milestone_data
+from sentiment_lab.experiments.validation import ValidationRunner, sync_validation_data
 from sentiment_lab.nlp.cache import ClassificationCache
 from sentiment_lab.nlp.classifier import ArticleClassifier
 from sentiment_lab.nlp.openai_client import OpenAIBatchClient, OpenAIClassificationError
@@ -30,8 +33,10 @@ from sentiment_lab.nlp.openai_client import OpenAIBatchClient, OpenAIClassificat
 app = typer.Typer(no_args_is_help=True, help="EODHD → OpenAI sentiment research")
 data_app = typer.Typer(no_args_is_help=True, help="Download and cache milestone data")
 milestone_app = typer.Typer(no_args_is_help=True, help="Run the article-to-return milestone")
+validation_app = typer.Typer(no_args_is_help=True, help="Run the bounded 250-article validation")
 app.add_typer(data_app, name="data")
 app.add_typer(milestone_app, name="milestone")
+app.add_typer(validation_app, name="validation")
 
 
 def _fail(message: str) -> NoReturn:
@@ -49,8 +54,6 @@ def _load(
         level=getattr(logging, runtime.log_level.upper(), logging.INFO),
         format="%(asctime)s %(levelname)s %(name)s — %(message)s",
     )
-    # EODHD authenticates through a query parameter, which HTTPX includes in
-    # its INFO request line. Keep third-party transport logging from exposing it.
     logging.getLogger("httpx").setLevel(logging.WARNING)
     logging.getLogger("httpcore").setLevel(logging.WARNING)
     return (
@@ -58,6 +61,53 @@ def _load(
         load_app_config(settings_path, secrets=runtime),
         load_sentiment_config(sentiment_path),
         load_experiment_config(experiment_path),
+    )
+
+
+def _load_validation(
+    experiment_path: Path,
+    settings_path: Path,
+    sentiment_path: Path,
+) -> tuple[RuntimeSecrets, AppConfig, SentimentConfig, ValidationExperimentConfig]:
+    runtime = RuntimeSecrets()
+    logging.basicConfig(
+        level=getattr(logging, runtime.log_level.upper(), logging.INFO),
+        format="%(asctime)s %(levelname)s %(name)s — %(message)s",
+    )
+    logging.getLogger("httpx").setLevel(logging.WARNING)
+    logging.getLogger("httpcore").setLevel(logging.WARNING)
+    return (
+        runtime,
+        load_app_config(settings_path, secrets=runtime),
+        load_sentiment_config(sentiment_path),
+        load_validation_experiment_config(experiment_path),
+    )
+
+
+def _classifier(
+    runtime: RuntimeSecrets,
+    app_config: AppConfig,
+    sentiment_config: SentimentConfig,
+) -> ArticleClassifier:
+    model_client = OpenAIBatchClient(
+        runtime.require_openai_key(),
+        app_config.openai,
+        app_config.storage.data_root,
+    )
+    return ArticleClassifier(
+        model_client,
+        ClassificationCache(app_config.storage.data_root),
+        app_config.openai,
+        schema_version=sentiment_config.schema_version,
+        max_article_characters=sentiment_config.max_article_characters,
+        escalation_confidence_threshold=sentiment_config.escalation_confidence_threshold,
+        escalation_materiality_threshold=sentiment_config.escalation_materiality_threshold,
+        escalation_ambiguity_relevance_threshold=(
+            sentiment_config.escalation_ambiguity_relevance_threshold
+        ),
+        escalation_ambiguity_materiality_threshold=(
+            sentiment_config.escalation_ambiguity_materiality_threshold
+        ),
     )
 
 
@@ -150,6 +200,83 @@ def milestone_run(
                 classifier,
             )
             output = runner.run(refresh=refresh)
+    except (EODHDError, OpenAIClassificationError, RuntimeError) as exc:
+        _fail(str(exc))
+    typer.echo(str(output))
+
+
+@validation_app.command("sync")
+def validation_sync(
+    config: Annotated[Path, typer.Option(exists=True, readable=True, help="Validation YAML")],
+    settings: Annotated[Path, typer.Option(exists=True)] = Path("config/settings.yaml"),
+    sentiment: Annotated[Path, typer.Option(exists=True)] = Path("config/sentiment.yaml"),
+    refresh: Annotated[
+        bool, typer.Option(help="Bypass EODHD request cache and append raw responses")
+    ] = False,
+) -> None:
+    """Freeze and validate the 250-article sample without calling OpenAI."""
+
+    runtime, app_config, sentiment_config, experiment = _load_validation(
+        config, settings, sentiment
+    )
+    try:
+        token = runtime.require_eodhd_token()
+        with EODHDClient(
+            token,
+            app_config.eodhd,
+            RawResponseCache(app_config.storage.data_root),
+        ) as client:
+            snapshot = sync_validation_data(
+                experiment,
+                app_config,
+                sentiment_config,
+                client,
+                refresh=refresh,
+            )
+    except (EODHDError, RuntimeError) as exc:
+        _fail(str(exc))
+    typer.echo(
+        json.dumps(
+            {
+                "snapshot_id": snapshot.snapshot_id,
+                "articles": len(snapshot.sampled),
+                "articles_path": str(snapshot.articles_path),
+                "prices_path": str(snapshot.prices_path),
+                "filtering": snapshot.filter_report,
+            },
+            indent=2,
+        )
+    )
+
+
+@validation_app.command("run")
+def validation_run(
+    config: Annotated[Path, typer.Option(exists=True, readable=True, help="Validation YAML")],
+    settings: Annotated[Path, typer.Option(exists=True)] = Path("config/settings.yaml"),
+    sentiment: Annotated[Path, typer.Option(exists=True)] = Path("config/sentiment.yaml"),
+) -> None:
+    """Run exactly one frozen, cost-bounded 250-article Batch validation."""
+
+    runtime, app_config, sentiment_config, experiment = _load_validation(
+        config, settings, sentiment
+    )
+    if experiment.frozen_snapshot_id is None:
+        _fail("frozen_snapshot_id is required; run `sentiment-lab validation sync` first")
+    try:
+        token = runtime.require_eodhd_token()
+        classifier = _classifier(runtime, app_config, sentiment_config)
+        with EODHDClient(
+            token,
+            app_config.eodhd,
+            RawResponseCache(app_config.storage.data_root),
+        ) as client:
+            output = ValidationRunner(
+                experiment,
+                app_config,
+                sentiment_config,
+                client,
+                classifier,
+            ).run()
     except (EODHDError, OpenAIClassificationError, RuntimeError) as exc:
         _fail(str(exc))
     typer.echo(str(output))

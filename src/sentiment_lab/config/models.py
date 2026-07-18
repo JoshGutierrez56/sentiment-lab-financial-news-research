@@ -36,6 +36,7 @@ class BatchModelPricing(StrictModel):
 
 class SpendingLimits(StrictModel):
     smoke: float = Field(default=1.0, gt=0.0)
+    bounded_validation: float = Field(default=2.0, gt=0.0)
     first_research_sample: float = Field(default=5.0, gt=0.0)
     expanded_validation: float = Field(default=20.0, gt=0.0)
 
@@ -149,6 +150,64 @@ class ExperimentConfig(StrictModel):
             raise ValueError("news_end must be on or after news_start")
         if self.news_candidate_pool < self.max_articles:
             raise ValueError("news_candidate_pool must be at least max_articles")
+        return self
+
+
+class ValidationUniverseMember(StrictModel):
+    ticker: str = Field(min_length=3)
+    company_name: str = Field(min_length=1)
+    sector: str = Field(min_length=1)
+    aliases: list[str] = Field(default_factory=list)
+
+    @field_validator("ticker")
+    @classmethod
+    def normalize_ticker(cls, value: str) -> str:
+        return value.strip().upper()
+
+
+class ValidationExperimentConfig(StrictModel):
+    """Frozen contract for the bounded, diversified article validation."""
+
+    name: str = Field(min_length=1, pattern=r"^[a-z0-9][a-z0-9_-]*$")
+    news_start: date
+    news_end: date
+    universe: list[ValidationUniverseMember] = Field(min_length=2)
+    articles_per_company: int = Field(default=10, ge=1, le=50)
+    max_articles: int = Field(default=250, ge=1, le=250)
+    news_candidate_pool_per_company: int = Field(default=200, ge=10, le=1000)
+    horizons: list[int] = Field(default_factory=lambda: [1, 3, 5, 21], min_length=1)
+    neutral_return_bps: float = Field(default=10.0, ge=0.0, le=1000.0)
+    random_seed: int = 20260718
+    prompt_variant: Literal["directional_v1", "evidence_v2"] = "evidence_v2"
+    spending_limit_tier: Literal["bounded_validation"] = "bounded_validation"
+    frozen_snapshot_id: str | None = Field(default=None, pattern=r"^[0-9a-f]{16}$")
+    minimum_months: int = Field(default=3, ge=2, le=24)
+    minimum_sectors: int = Field(default=8, ge=2, le=20)
+    minimum_event_buckets: int = Field(default=6, ge=2, le=9)
+    bootstrap_samples: int = Field(default=2000, ge=100, le=10000)
+
+    @field_validator("horizons")
+    @classmethod
+    def validate_horizons(cls, value: list[int]) -> list[int]:
+        if any(item <= 0 for item in value):
+            raise ValueError("horizons must contain positive trading-day counts")
+        if len(value) != len(set(value)):
+            raise ValueError("horizons must be unique")
+        return sorted(value)
+
+    @model_validator(mode="after")
+    def validate_design(self) -> ValidationExperimentConfig:
+        if self.news_end < self.news_start:
+            raise ValueError("news_end must be on or after news_start")
+        if len({member.ticker for member in self.universe}) != len(self.universe):
+            raise ValueError("validation universe tickers must be unique")
+        expected = len(self.universe) * self.articles_per_company
+        if self.max_articles != expected:
+            raise ValueError(
+                f"max_articles must equal universe size times articles_per_company ({expected})"
+            )
+        if 21 not in self.horizons:
+            raise ValueError("bounded validation requires a 21-trading-day horizon")
         return self
 
 

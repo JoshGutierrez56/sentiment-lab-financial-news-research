@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import re
 from collections.abc import Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import Literal, Protocol
 
@@ -76,8 +76,16 @@ class BatchGateway(Protocol):
 
 
 @dataclass(frozen=True)
+class ClassificationTarget:
+    article: NewsArticle
+    ticker: str
+    company_name: str
+
+
+@dataclass(frozen=True)
 class _PreparedArticle:
     article: NewsArticle
+    ticker: str
     cache_key: str
     input_hash: str
     custom_id: str
@@ -89,6 +97,7 @@ class ClassificationRun:
     final_records: list[ClassificationRecord]
     ledger_entries: list[ClassificationLedgerEntry]
     batch_executions: list[BatchExecution]
+    first_pass_records: list[ClassificationRecord | None] = field(default_factory=list)
 
     @property
     def current_run_cost_usd(self) -> float:
@@ -175,6 +184,7 @@ class ArticleClassifier:
         stage_prefix = "fp" if stage == "first_pass" else "esc"
         return _PreparedArticle(
             article=article,
+            ticker=ticker.strip().upper(),
             cache_key=cache_key,
             input_hash=input_hash,
             custom_id=f"{stage_prefix}-{cache_key[:56]}",
@@ -186,6 +196,33 @@ class ArticleClassifier:
                 max_characters=self.max_article_characters,
             ),
         )
+
+    def batch_custom_ids(
+        self,
+        targets: Sequence[ClassificationTarget],
+        *,
+        prompt_variant: str,
+    ) -> set[str]:
+        """Return all possible first-pass/escalation IDs without calling OpenAI."""
+
+        custom_ids: set[str] = set()
+        for target in targets:
+            stages: tuple[tuple[str, Stage], ...] = (
+                (self.openai_config.first_pass_model, "first_pass"),
+                (self.openai_config.escalation_model, "escalation"),
+            )
+            for model, stage in stages:
+                custom_ids.add(
+                    self._prepare(
+                        target.article,
+                        ticker=target.ticker,
+                        company_name=target.company_name,
+                        prompt_variant=prompt_variant,
+                        model=model,
+                        stage=stage,
+                    ).custom_id
+                )
+        return custom_ids
 
     @staticmethod
     def _bind_cached(
@@ -211,7 +248,6 @@ class ArticleClassifier:
         prepared: _PreparedArticle,
         call: ModelCall,
         *,
-        ticker: str,
         requested_model: str,
         prompt_version: str,
         stage: Stage,
@@ -222,7 +258,7 @@ class ArticleClassifier:
             input_hash=prepared.input_hash,
             output_hash=assessment_hash(call.assessment),
             article_id=prepared.article.article_id,
-            ticker=ticker,
+            ticker=prepared.ticker,
             event_timestamp=prepared.article.provider_timestamp,
             requested_model=requested_model,
             model=call.response_model,
@@ -275,7 +311,6 @@ class ArticleClassifier:
         prepared: _PreparedArticle,
         failure: BatchFailure,
         *,
-        ticker: str,
         requested_model: str,
         prompt_version: str,
         schema_version: str,
@@ -285,7 +320,7 @@ class ArticleClassifier:
     ) -> ClassificationLedgerEntry:
         return ClassificationLedgerEntry(
             article_id=prepared.article.article_id,
-            ticker=ticker,
+            ticker=prepared.ticker,
             event_timestamp=prepared.article.provider_timestamp,
             cache_key=prepared.cache_key,
             input_hash=prepared.input_hash,
@@ -352,7 +387,6 @@ class ArticleClassifier:
         prompt_version: str,
         stage: Stage,
         budget_remaining_usd: float,
-        ticker: str,
         escalation_reasons_by_index: dict[int, list[str]],
         ledger: list[ClassificationLedgerEntry],
     ) -> tuple[dict[int, ClassificationRecord], BatchExecution | None]:
@@ -396,7 +430,6 @@ class ArticleClassifier:
                 canonical = self._record_from_call(
                     representative,
                     call,
-                    ticker=ticker,
                     requested_model=model,
                     prompt_version=prompt_version,
                     stage=stage,
@@ -420,7 +453,6 @@ class ArticleClassifier:
                     self._failure_ledger(
                         failed,
                         failure,
-                        ticker=ticker,
                         requested_model=model,
                         prompt_version=prompt_version,
                         schema_version=self.schema_version,
@@ -440,8 +472,34 @@ class ArticleClassifier:
         prompt_variant: str,
         budget_limit_usd: float,
     ) -> ClassificationRun:
-        if not articles:
-            raise ValueError("articles must not be empty")
+        return self.classify_targets(
+            [
+                ClassificationTarget(
+                    article=article,
+                    ticker=ticker,
+                    company_name=company_name,
+                )
+                for article in articles
+            ],
+            prompt_variant=prompt_variant,
+            budget_limit_usd=budget_limit_usd,
+        )
+
+    def classify_targets(
+        self,
+        targets: Sequence[ClassificationTarget],
+        *,
+        prompt_variant: str,
+        budget_limit_usd: float,
+    ) -> ClassificationRun:
+        """Classify ticker-specific targets in one first-pass batch.
+
+        The single-ticker ``classify_many`` API remains as a compatibility wrapper. This
+        method enables a diversified validation sample to complete all economical-model
+        classifications before constructing any escalation request.
+        """
+        if not targets:
+            raise ValueError("targets must not be empty")
         if budget_limit_usd <= 0:
             raise ValueError("budget_limit_usd must be positive")
         prompt_version = PROMPT_VERSIONS[prompt_variant]
@@ -452,15 +510,15 @@ class ArticleClassifier:
             (
                 index,
                 self._prepare(
-                    article,
-                    ticker=ticker,
-                    company_name=company_name,
+                    target.article,
+                    ticker=target.ticker,
+                    company_name=target.company_name,
                     prompt_variant=prompt_variant,
                     model=self.openai_config.first_pass_model,
                     stage="first_pass",
                 ),
             )
-            for index, article in enumerate(articles)
+            for index, target in enumerate(targets)
         ]
         first_records, first_execution = self._run_stage(
             first_prepared,
@@ -469,7 +527,6 @@ class ArticleClassifier:
             prompt_version=prompt_version,
             stage="first_pass",
             budget_remaining_usd=budget_limit_usd,
-            ticker=ticker,
             escalation_reasons_by_index={},
             ledger=ledger,
         )
@@ -478,8 +535,8 @@ class ArticleClassifier:
 
         # The entire mini-model batch is complete before any expensive-model request is built.
         reasons_by_index = {
-            index: self._escalation_reasons(article, first_records.get(index))
-            for index, article in enumerate(articles)
+            index: self._escalation_reasons(target.article, first_records.get(index))
+            for index, target in enumerate(targets)
         }
         escalation_indices = [index for index, reasons in reasons_by_index.items() if reasons]
         final_records: dict[int, ClassificationRecord] = dict(first_records)
@@ -489,9 +546,9 @@ class ArticleClassifier:
                 (
                     index,
                     self._prepare(
-                        articles[index],
-                        ticker=ticker,
-                        company_name=company_name,
+                        targets[index].article,
+                        ticker=targets[index].ticker,
+                        company_name=targets[index].company_name,
                         prompt_variant=prompt_variant,
                         model=self.openai_config.escalation_model,
                         stage="escalation",
@@ -506,7 +563,6 @@ class ArticleClassifier:
                 prompt_version=prompt_version,
                 stage="escalation",
                 budget_remaining_usd=max(0.0, budget_limit_usd - spent),
-                ticker=ticker,
                 escalation_reasons_by_index=reasons_by_index,
                 ledger=ledger,
             )
@@ -520,16 +576,17 @@ class ArticleClassifier:
                 )
             final_records.update(escalation_records)
 
-        missing_final = sorted(set(range(len(articles))) - set(final_records))
+        missing_final = sorted(set(range(len(targets))) - set(final_records))
         if missing_final:
             raise OpenAIClassificationError(
                 f"No valid final classification for {len(missing_final)} article(s)"
             )
-        ordered = [final_records[index] for index in range(len(articles))]
+        ordered = [final_records[index] for index in range(len(targets))]
         run = ClassificationRun(
             final_records=ordered,
             ledger_entries=ledger,
             batch_executions=executions,
+            first_pass_records=[first_records.get(index) for index in range(len(targets))],
         )
         if run.current_run_cost_usd > budget_limit_usd + 1e-9:
             raise OpenAIClassificationError(
