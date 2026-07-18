@@ -370,3 +370,16 @@ def test_batch_budget_preflight_stops_before_upload(tmp_path: Path) -> None:
             budget_remaining_usd=0.0000001,
         )
     assert sdk.upload_count == 0
+
+
+def test_openai_status_detail_is_short_and_redacts_credentials() -> None:
+    detail = OpenAIBatchClient._status_error_detail(
+        SimpleNamespace(
+            body={
+                "message": "  Invalid request with Bearer secret-token and "
+                "sk-proj-do-not-print-this-value  "
+            }
+        )
+    )
+
+    assert detail == "Invalid request with Bearer [REDACTED] and [REDACTED]"

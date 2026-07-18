@@ -9,9 +9,14 @@ Research conclusion: **INCONCLUSIVE — live OpenAI classification is blocked**
 ## Current state
 
 The cost-optimized EODHD-to-OpenAI-to-return implementation is complete and
-validated with deterministic mocked Batch responses. The existing real
-12-article provider sample was rerun from cache, but no OpenAI request was made
-because the local runtime has no `OPENAI_API_KEY`.
+validated with deterministic mocked Batch responses. A live run of the real
+12-article provider sample reached OpenAI on 2026-07-18, but OpenAI rejected
+batch creation with HTTP 400: `Billing hard limit has been reached`.
+
+Authentication and the input-file upload succeeded. No batch job was created,
+no model inference ran, no classifications or cache entries were produced, and
+measured token use and model cost remain zero. The API key was process-scoped
+for the attempted run and was not written to the repository or an `.env` file.
 
 The live-data selection command was:
 
@@ -68,7 +73,8 @@ The conservative pre-submit ceiling for this 12-article snapshot is:
 | Combined worst case | $0.19077475 |
 | Smoke limit | $1.00000000 |
 
-No upload occurred during this estimate.
+The estimate itself made no upload. The later live attempt uploaded the JSONL
+input before OpenAI rejected batch creation; it did not incur model usage.
 
 ## Automated verification
 
@@ -76,8 +82,8 @@ No upload occurred during this estimate.
 Ruff format: PASS
 Ruff lint:   PASS
 MyPy:       PASS (23 source files)
-Pytest:     PASS (41 tests)
-Coverage:   PASS (90.16%; gate 85%)
+Pytest:     PASS (42 tests)
+Coverage:   PASS (89.79%; gate 85%)
 ```
 
 Tests cover JSONL request shape, strict output fields, unordered Batch output,
@@ -94,16 +100,26 @@ The command:
 uv run sentiment-lab milestone run --config config/experiments/milestone.yaml
 ```
 
-stops cleanly before provider or OpenAI work with:
+now reaches OpenAI and stops cleanly with the sanitized provider error:
 
 ```text
-Error: OPENAI_API_KEY is required for real ChatGPT classification. Cached downloads and mocked tests do not require it.
+Error: Could not create the OpenAI batch; OpenAI returned HTTP 400: Billing hard limit has been reached
 ```
 
-Configure the key locally in the untracked `.env`—do not paste it into chat—and
-rerun that command. A complete run will report articles considered/filtered,
-mini classifications, escalations, cache hits, exact token totals, total and
-average cost, correctly aligned returns, accuracy, and IC.
+Remediation:
+
+1. In the OpenAI Platform billing settings, add a valid payment method or
+   credits if needed and raise the organization/project hard usage limit above
+   the `$1` smoke cap.
+2. Revoke the credential that appeared in chat history and create a replacement.
+3. Configure the replacement only in the untracked local `.env` as
+   `OPENAI_API_KEY=...`; do not paste it into chat.
+4. Rerun the command above. The pre-submit guard will still prevent the smoke
+   run from exceeding `$1`.
+
+A complete run will report articles considered/filtered, mini
+classifications, escalations, cache hits, exact token totals, total and average
+cost, correctly aligned returns, accuracy, and IC.
 
 The next size is 100 articles under the $5 tier, but it must not run until the
 12-article classifications are inspected for schema quality, abstention,
@@ -115,3 +131,6 @@ An earlier EODHD smoke request exposed its query token in private HTTPX INFO
 output. Transport logging was subsequently forced to WARNING, sanitized client
 logging was added, and persisted data was scanned with zero token matches.
 Rotating that EODHD token remains prudent.
+
+The OpenAI key supplied for the live attempt also appeared in chat history. It
+must be revoked and replaced before the next run.

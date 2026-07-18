@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import re
 import time
 import uuid
 from dataclasses import dataclass
@@ -224,9 +225,31 @@ class OpenAIBatchClient:
         except (APIConnectionError, APITimeoutError, RateLimitError) as exc:
             raise OpenAIClassificationError(failure_message) from exc
         except APIStatusError as exc:
+            detail = self._status_error_detail(exc)
+            suffix = f": {detail}" if detail else ""
             raise OpenAIClassificationError(
-                f"{failure_message}; OpenAI returned HTTP {exc.status_code}"
+                f"{failure_message}; OpenAI returned HTTP {exc.status_code}{suffix}"
             ) from exc
+
+    @staticmethod
+    def _status_error_detail(exc: Any) -> str | None:
+        """Return only the API's short message, with credentials defensively redacted."""
+
+        body = getattr(exc, "body", None)
+        message: Any = None
+        if isinstance(body, dict):
+            message = body.get("message")
+            nested = body.get("error")
+            if message is None and isinstance(nested, dict):
+                message = nested.get("message")
+        if not isinstance(message, str):
+            message = getattr(exc, "message", None)
+        if not isinstance(message, str) or not message.strip():
+            return None
+        normalized = " ".join(message.split())
+        normalized = re.sub(r"(?i)bearer\s+\S+", "Bearer [REDACTED]", normalized)
+        normalized = re.sub(r"\bsk-[A-Za-z0-9_-]{10,}\b", "[REDACTED]", normalized)
+        return normalized[:500]
 
     def _submit_or_resume(
         self,
