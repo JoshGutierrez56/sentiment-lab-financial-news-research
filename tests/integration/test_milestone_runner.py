@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 from datetime import UTC, date, datetime
 from pathlib import Path
+from types import SimpleNamespace
 
 import duckdb
 import polars as pl
@@ -43,6 +44,7 @@ class FakeEODHD:
 class FakeClassifier:
     def __init__(self) -> None:
         self.calls = 0
+        self.model_client = SimpleNamespace(model="test-model")
 
     def classify_many(self, articles: list[object], **_: object) -> list[object]:
         self.calls += 1
@@ -53,7 +55,10 @@ class FakeClassifier:
         ]
         return [
             make_record(article, label=label, score=score).model_copy(
-                update={"cache_key": article.article_id}
+                update={
+                    "cache_key": article.article_id,
+                    "from_cache": self.calls > 1,
+                }
             )
             for article, (label, score) in zip(articles, labels, strict=True)
         ]
@@ -120,6 +125,8 @@ def test_runner_emits_auditable_reproducible_milestone_artifacts(tmp_path: Path)
     assert file_sha256(first_output / "events.parquet") == file_sha256(
         second_output / "events.parquet"
     )
+    for artifact in ("articles.parquet", "assessments.parquet", "events.parquet", "metrics.json"):
+        assert file_sha256(first_output / artifact) == file_sha256(second_output / artifact)
     assert first_events["article_text"].str.len_chars().min() > 0
     assert first_events["reasoning"].str.len_chars().min() > 0
     assert first_events["entry_date"].unique().to_list() == [date(2026, 5, 4)]
@@ -128,6 +135,20 @@ def test_runner_emits_auditable_reproducible_milestone_artifacts(tmp_path: Path)
     assert manifest["data_snapshot_id"]
     assert manifest["config_hash"]
     assert manifest["token_usage"]["input_tokens"] == 300
+    assert manifest["classification_ledger_usage"]["input_tokens"] == 300
+    assert manifest["classification_cache"] == {"hits": 0, "misses": 3}
+    assert manifest["openai_model_requested"] == "test-model"
+    assert manifest["openai_models_returned"] == ["test-model"]
+    assert manifest["provider_api"]["openai"]["surface"] == ("Responses API Structured Outputs")
+    assert manifest["software_versions"]["python"]
+    second_manifest = json.loads((second_output / "manifest.json").read_text(encoding="utf-8"))
+    assert second_manifest["token_usage"] == {
+        "estimated_cost_usd": 0.0,
+        "input_tokens": 0,
+        "output_tokens": 0,
+    }
+    assert second_manifest["classification_ledger_usage"]["input_tokens"] == 300
+    assert second_manifest["classification_cache"] == {"hits": 3, "misses": 0}
     assert "EODHD → ChatGPT → Future Returns" in (first_output / "report.html").read_text(
         encoding="utf-8"
     )
@@ -140,6 +161,7 @@ def test_runner_emits_auditable_reproducible_milestone_artifacts(tmp_path: Path)
     assert stored_assessments.schema["event_timestamp"] == pl.Datetime("us", "UTC")
     assert stored_assessments["input_hash"].str.len_chars().unique().to_list() == [64]
     assert stored_assessments["output_hash"].str.len_chars().unique().to_list() == [64]
+    assert "from_cache" not in stored_assessments.columns
 
 
 def test_sync_filters_to_full_text_direct_ticker_mapping(tmp_path: Path) -> None:

@@ -60,14 +60,15 @@ article/classification timestamp mismatch rejection.
 ```text
 Ruff:       PASS
 MyPy:      PASS (23 source files)
-Pytest:    PASS (37 tests)
-Coverage:  PASS (91.82%; gate 85%)
+Pytest:    PASS (38 tests)
+Coverage:  PASS (91.68%; gate 85%)
 Python:    PASS on 3.11.15 and 3.12.10
 ```
 
 The mocked integration test runs the full article → structured assessment →
-future return → metrics/report pipeline twice and obtains identical event
-Parquet hashes.
+future return → metrics/report pipeline twice. Articles, assessments, events,
+and metrics have identical hashes; the second manifest records three cache hits
+and zero new model tokens while preserving the original classification ledger.
 
 ## Security finding and remediation
 

@@ -85,6 +85,10 @@ uv run sentiment-lab milestone run --config config/experiments/milestone.yaml
 
 Do not add `--refresh` or `--force-classify` on a reproducibility rerun. The
 command will then use the raw EODHD cache and content-addressed OpenAI cache.
+The scientific artifacts (`articles.parquet`, `assessments.parquet`,
+`events.parquet`, and `metrics.json`) are byte-stable. The report and manifest
+receive a new run identity and timestamp; the manifest records cache hits and
+zero per-run OpenAI tokens/cost while retaining original ledger usage.
 
 Each completed run creates `data/results/<experiment-id>/` containing:
 
@@ -97,7 +101,9 @@ Each completed run creates `data/results/<experiment-id>/` containing:
 - `metrics.json` — coverage, directional accuracy, Spearman IC, Pearson
   correlation, confidence-weighted IC, and per-label returns.
 - `manifest.json` — git/config/data hashes, exact versions and parameters,
-  artifact hashes, token totals, and summary metrics.
+  provider endpoints, Python/SDK/library versions, artifact hashes, cache
+  hits/misses, per-run token/cost totals, classification-ledger usage, and
+  summary metrics.
 - `report.html` — a compact human-readable evidence table and metrics report.
 
 The latest normalized tables are also exposed in `data/research.duckdb` as

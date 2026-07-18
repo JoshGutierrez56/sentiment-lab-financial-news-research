@@ -189,8 +189,12 @@ def test_request_logging_is_sanitized(tmp_path: Path, caplog: pytest.LogCaptureF
         return httpx.Response(200, json=[])
 
     caplog.set_level(logging.INFO, logger="sentiment_lab.data.eodhd_client")
+    caplog.set_level(logging.INFO, logger="httpx")
     client = _client(tmp_path, handler)
-    client.fetch_news("AAPL.US", date.today(), date.today(), max_articles=1, refresh=True)
+    try:
+        client.fetch_news("AAPL.US", date.today(), date.today(), max_articles=1, refresh=True)
+    finally:
+        client.close()
     assert "endpoint=/api/news" in caplog.text
+    assert "HTTP Request" in caplog.text
     assert "secret-token" not in caplog.text
-    assert "api_token" not in caplog.text

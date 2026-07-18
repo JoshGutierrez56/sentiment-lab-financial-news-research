@@ -13,5 +13,10 @@
 - Validate a live EODHD AAPL sample and correct three defects found during the
   smoke run: Windows cache path length, credential-bearing HTTPX INFO logs, and
   string-typed temporal Parquet columns.
-- Add 37 tests with more than 90% package coverage, including a deterministic
+- Add 38 tests with more than 90% package coverage, including a deterministic
   mocked end-to-end rerun.
+- Make scientific cached-rerun artifacts byte-stable, separate per-run OpenAI
+  usage from historical classification-ledger usage, retain unknown cost as
+  unknown, and record provider/software versions in manifests.
+- Redact the EODHD query token from HTTPX transport logs even when the client is
+  used outside the CLI, and add credential-free Python 3.11/3.12 CI.

@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 import hashlib
+import platform
 import subprocess
 from dataclasses import dataclass
 from datetime import UTC, date, datetime, timedelta
+from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
 from typing import Any
 from zoneinfo import ZoneInfo
@@ -20,9 +22,32 @@ from sentiment_lab.data.eodhd_client import EODHDClient
 from sentiment_lab.data.schemas import EODPrice, NewsArticle
 from sentiment_lab.data.storage import ArtifactStore, file_sha256
 from sentiment_lab.nlp.classifier import ArticleClassifier
+from sentiment_lab.nlp.schemas import ClassificationRecord
 from sentiment_lab.reporting.report import build_milestone_report
 
 NEW_YORK = ZoneInfo("America/New_York")
+
+
+def _usage_totals(records: list[ClassificationRecord]) -> dict[str, int | float | None]:
+    costs = [record.usage.estimated_cost_usd for record in records]
+    if not records:
+        estimated_cost: float | None = 0.0
+    elif any(cost is None for cost in costs):
+        estimated_cost = None
+    else:
+        estimated_cost = sum(cost for cost in costs if cost is not None)
+    return {
+        "input_tokens": sum(record.usage.input_tokens for record in records),
+        "output_tokens": sum(record.usage.output_tokens for record in records),
+        "estimated_cost_usd": estimated_cost,
+    }
+
+
+def _package_version(distribution: str) -> str | None:
+    try:
+        return version(distribution)
+    except PackageNotFoundError:
+        return None
 
 
 @dataclass(frozen=True)
@@ -207,7 +232,6 @@ class MilestoneRunner:
                     "input_tokens": record.usage.input_tokens,
                     "output_tokens": record.usage.output_tokens,
                     "estimated_cost_usd": record.usage.estimated_cost_usd,
-                    "from_cache": record.from_cache,
                 }
             )
             assessment_rows.append(row)
@@ -226,13 +250,9 @@ class MilestoneRunner:
             horizons=self.experiment.horizons,
             generated_at=started.isoformat(),
         )
-        token_totals = {
-            "input_tokens": sum(item.usage.input_tokens for item in classifications),
-            "output_tokens": sum(item.usage.output_tokens for item in classifications),
-            "estimated_cost_usd": sum(
-                item.usage.estimated_cost_usd or 0.0 for item in classifications
-            ),
-        }
+        cache_hits = sum(record.from_cache for record in classifications)
+        run_model_calls = [record for record in classifications if not record.from_cache]
+        returned_models = sorted({record.model for record in classifications})
         artifacts = {
             path.name: {"path": str(path), "sha256": file_sha256(path)}
             for path in [articles_path, assessments_path, events_path, metrics_path, report_path]
@@ -249,10 +269,31 @@ class MilestoneRunner:
                 "articles": file_sha256(snapshot.articles_path),
                 "prices": file_sha256(snapshot.prices_path),
             },
-            "openai_model": classifications[0].model,
+            "provider_api": {
+                "eodhd": {
+                    "version": "unversioned",
+                    "news_endpoint": "/api/news",
+                    "price_endpoint": f"/api/eod/{self.experiment.ticker}",
+                },
+                "openai": {"surface": "Responses API Structured Outputs"},
+            },
+            "software_versions": {
+                "python": platform.python_version(),
+                "sentiment_lab": _package_version("sentiment-lab"),
+                "openai_sdk": _package_version("openai"),
+                "polars": _package_version("polars"),
+                "duckdb": _package_version("duckdb"),
+            },
+            "openai_model_requested": self.classifier.model_client.model,
+            "openai_models_returned": returned_models,
             "prompt_version": classifications[0].prompt_version,
             "schema_version": classifications[0].schema_version,
-            "token_usage": token_totals,
+            "classification_cache": {
+                "hits": cache_hits,
+                "misses": len(classifications) - cache_hits,
+            },
+            "token_usage": _usage_totals(run_model_calls),
+            "classification_ledger_usage": _usage_totals(classifications),
             "metrics": metrics,
             "artifacts": artifacts,
         }

@@ -10,6 +10,7 @@ from collections.abc import Callable
 from datetime import date
 from email.utils import parsedate_to_datetime
 from typing import Any, cast
+from urllib.parse import quote
 
 import httpx
 from pydantic import ValidationError
@@ -19,6 +20,31 @@ from sentiment_lab.data.cache import CachedPayload, RawResponseCache
 from sentiment_lab.data.schemas import EODHDNewsItem, EODPrice, NewsArticle
 
 log = logging.getLogger(__name__)
+
+
+class _SecretRedactionFilter(logging.Filter):
+    """Redact an EODHD query token from third-party transport log records."""
+
+    def __init__(self, token: str) -> None:
+        super().__init__()
+        self._secrets = (token, quote(token, safe=""))
+
+    def _redact(self, value: object) -> object:
+        rendered = str(value)
+        if not any(secret and secret in rendered for secret in self._secrets):
+            return value
+        for secret in self._secrets:
+            if secret:
+                rendered = rendered.replace(secret, "[REDACTED]")
+        return rendered
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        record.msg = self._redact(record.msg)
+        if isinstance(record.args, tuple):
+            record.args = tuple(self._redact(value) for value in record.args)
+        elif isinstance(record.args, dict):
+            record.args = {key: self._redact(value) for key, value in record.args.items()}
+        return True
 
 
 class EODHDError(RuntimeError):
@@ -59,8 +85,14 @@ class EODHDClient:
         )
         self._sleep = sleeper
         self._rng = rng or random.Random()
+        self._transport_loggers = (logging.getLogger("httpx"), logging.getLogger("httpcore"))
+        self._redaction_filter = _SecretRedactionFilter(self._token)
+        for transport_logger in self._transport_loggers:
+            transport_logger.addFilter(self._redaction_filter)
 
     def close(self) -> None:
+        for transport_logger in self._transport_loggers:
+            transport_logger.removeFilter(self._redaction_filter)
         if self._owns_http:
             self.http.close()
 
