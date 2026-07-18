@@ -109,6 +109,8 @@ class SentimentConfig(StrictModel):
     minimum_relevance: float = Field(default=0.0, ge=0.0, le=1.0)
     escalation_confidence_threshold: float = Field(default=0.70, ge=0.0, le=1.0)
     escalation_materiality_threshold: float = Field(default=0.80, ge=0.0, le=1.0)
+    escalation_ambiguity_relevance_threshold: float = Field(default=0.50, ge=0.0, le=1.0)
+    escalation_ambiguity_materiality_threshold: float = Field(default=0.25, gt=0.0, le=1.0)
 
 
 class ExperimentConfig(StrictModel):

@@ -9,7 +9,12 @@ import pytest
 from pydantic import ValidationError
 
 from sentiment_lab.config.loader import load_app_config, load_experiment_config, load_yaml
-from sentiment_lab.config.models import ExperimentConfig, OpenAIConfig, RuntimeSecrets
+from sentiment_lab.config.models import (
+    ExperimentConfig,
+    OpenAIConfig,
+    RuntimeSecrets,
+    SentimentConfig,
+)
 
 
 def test_unknown_yaml_field_is_rejected(tmp_path: Path) -> None:
@@ -89,6 +94,14 @@ def test_cost_control_defaults_and_pro_models_are_guarded() -> None:
     assert config.spending_limits_usd.expanded_validation == 20.0
     with pytest.raises(ValidationError, match="Pro models are prohibited"):
         OpenAIConfig(escalation_model="gpt-5.4-pro")
+
+
+def test_ambiguity_escalation_thresholds_are_explicit_and_validated() -> None:
+    config = SentimentConfig()
+    assert config.escalation_ambiguity_relevance_threshold == 0.50
+    assert config.escalation_ambiguity_materiality_threshold == 0.25
+    with pytest.raises(ValidationError, match="greater than 0"):
+        SentimentConfig(escalation_ambiguity_materiality_threshold=0.0)
 
 
 def test_load_yaml_rejects_missing_and_non_mapping(tmp_path: Path) -> None:

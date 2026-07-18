@@ -23,6 +23,7 @@ from sentiment_lab.nlp.schemas import (
     ClassificationLedgerEntry,
     ClassificationRecord,
     EventType,
+    SentimentLabel,
 )
 
 Stage = Literal["first_pass", "escalation"]
@@ -139,6 +140,8 @@ class ArticleClassifier:
         max_article_characters: int,
         escalation_confidence_threshold: float,
         escalation_materiality_threshold: float,
+        escalation_ambiguity_relevance_threshold: float,
+        escalation_ambiguity_materiality_threshold: float,
     ) -> None:
         self.batch_client = batch_client
         self.cache = cache
@@ -147,6 +150,8 @@ class ArticleClassifier:
         self.max_article_characters = max_article_characters
         self.escalation_confidence_threshold = escalation_confidence_threshold
         self.escalation_materiality_threshold = escalation_materiality_threshold
+        self.escalation_ambiguity_relevance_threshold = escalation_ambiguity_relevance_threshold
+        self.escalation_ambiguity_materiality_threshold = escalation_ambiguity_materiality_threshold
 
     def _prepare(
         self,
@@ -311,6 +316,11 @@ class ArticleClassifier:
         if first_pass is None:
             return ["structured_output_validation_repeated_failure"]
         assessment = first_pass.assessment
+        if (
+            assessment.sentiment_label is SentimentLabel.neutral
+            and assessment.materiality < self.escalation_ambiguity_materiality_threshold
+        ):
+            return []
         reasons: list[str] = []
         if assessment.confidence < self.escalation_confidence_threshold:
             reasons.append("confidence_below_threshold")
@@ -323,7 +333,13 @@ class ArticleClassifier:
             and assessment.materiality >= self.escalation_materiality_threshold
         ):
             reasons.append("event_type:major_litigation")
-        if contains_contradictory_information(article):
+        if (
+            not assessment.abstain
+            and assessment.materiality > 0.0
+            and assessment.relevance >= self.escalation_ambiguity_relevance_threshold
+            and assessment.materiality >= self.escalation_ambiguity_materiality_threshold
+            and contains_contradictory_information(article)
+        ):
             reasons.append("contradictory_article_evidence")
         return reasons
 

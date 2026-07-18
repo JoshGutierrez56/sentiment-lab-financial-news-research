@@ -133,6 +133,12 @@ def milestone_run(
         max_article_characters=sentiment_config.max_article_characters,
         escalation_confidence_threshold=(sentiment_config.escalation_confidence_threshold),
         escalation_materiality_threshold=(sentiment_config.escalation_materiality_threshold),
+        escalation_ambiguity_relevance_threshold=(
+            sentiment_config.escalation_ambiguity_relevance_threshold
+        ),
+        escalation_ambiguity_materiality_threshold=(
+            sentiment_config.escalation_ambiguity_materiality_threshold
+        ),
     )
     try:
         with EODHDClient(token, app_config.eodhd, raw_cache) as eodhd:

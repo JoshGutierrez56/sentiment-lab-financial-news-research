@@ -9,3 +9,5 @@ minimum_confidence: 0.0
 minimum_relevance: 0.0
 escalation_confidence_threshold: 0.70
 escalation_materiality_threshold: 0.80
+escalation_ambiguity_relevance_threshold: 0.50
+escalation_ambiguity_materiality_threshold: 0.25

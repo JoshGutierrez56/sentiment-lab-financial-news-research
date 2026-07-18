@@ -22,7 +22,7 @@ from sentiment_lab.nlp.openai_client import (
     OpenAIBudgetError,
 )
 from sentiment_lab.nlp.prompts import PROMPT_VERSIONS, build_messages
-from sentiment_lab.nlp.schemas import ArticleAssessment, EventType, ModelUsage
+from sentiment_lab.nlp.schemas import ArticleAssessment, EventType, ModelUsage, SentimentLabel
 
 
 def _assessment(article: object, **updates: object) -> ArticleAssessment:
@@ -123,6 +123,8 @@ def _classifier(tmp_path: Path, gateway: FakeBatchGateway) -> ArticleClassifier:
         max_article_characters=2000,
         escalation_confidence_threshold=0.70,
         escalation_materiality_threshold=0.80,
+        escalation_ambiguity_relevance_threshold=0.50,
+        escalation_ambiguity_materiality_threshold=0.25,
     )
 
 
@@ -197,6 +199,117 @@ def test_contradiction_detection_handles_punctuation() -> None:
     )
     assert contains_contradictory_information(contradictory)
     assert not contains_contradictory_information(one_sided)
+
+
+def test_contradiction_escalation_requires_substantive_non_abstaining_signal(
+    tmp_path: Path,
+) -> None:
+    abstaining = make_article(
+        article_id="3" * 64,
+        title="Abstaining article reports growth but also a loss",
+    )
+    zero_materiality = make_article(
+        article_id="4" * 64,
+        title="Immaterial article reports growth but also a loss",
+    )
+
+    def factory(article: object, _: str) -> ArticleAssessment:
+        if article.title.startswith("Abstaining"):
+            return _assessment(
+                article,
+                sentiment_label=SentimentLabel.neutral,
+                sentiment_score=0.0,
+                relevance=0.90,
+                materiality=0.50,
+                tradable=False,
+                abstain=True,
+            )
+        return _assessment(article, relevance=0.90, materiality=0.0)
+
+    gateway = FakeBatchGateway([abstaining, zero_materiality], factory)
+    result = _classifier(tmp_path, gateway).classify_many(
+        [abstaining, zero_materiality],
+        ticker="AAPL.US",
+        company_name="Apple Inc.",
+        prompt_variant="evidence_v2",
+        budget_limit_usd=1.0,
+    )
+
+    assert gateway.stage_calls == [("first_pass", "gpt-5.4-mini", 2)]
+    assert [record.stage for record in result.final_records] == ["first_pass", "first_pass"]
+
+
+def test_ambiguity_escalation_requires_relevance_and_materiality_thresholds(
+    tmp_path: Path,
+) -> None:
+    low_relevance = make_article(
+        article_id="5" * 64,
+        title="Low relevance reports growth but also a loss",
+    )
+    low_materiality = make_article(
+        article_id="6" * 64,
+        title="Low materiality reports growth but also a loss",
+    )
+    substantive = make_article(
+        article_id="7" * 64,
+        title="Substantive report shows growth but also a loss",
+    )
+
+    def factory(article: object, stage: str) -> ArticleAssessment:
+        if stage == "escalation":
+            return _assessment(article, relevance=0.90, materiality=0.40)
+        if article.title.startswith("Low relevance"):
+            return _assessment(article, relevance=0.49, materiality=0.40)
+        if article.title.startswith("Low materiality"):
+            return _assessment(article, relevance=0.90, materiality=0.24)
+        return _assessment(article, relevance=0.90, materiality=0.40)
+
+    gateway = FakeBatchGateway([low_relevance, low_materiality, substantive], factory)
+    result = _classifier(tmp_path, gateway).classify_many(
+        [low_relevance, low_materiality, substantive],
+        ticker="AAPL.US",
+        company_name="Apple Inc.",
+        prompt_variant="evidence_v2",
+        budget_limit_usd=1.0,
+    )
+
+    assert gateway.stage_calls == [
+        ("first_pass", "gpt-5.4-mini", 3),
+        ("escalation", "gpt-5.4", 1),
+    ]
+    assert [record.stage for record in result.final_records] == [
+        "first_pass",
+        "first_pass",
+        "escalation",
+    ]
+    assert result.final_records[2].escalation_reasons == ["contradictory_article_evidence"]
+
+
+def test_neutral_low_materiality_does_not_escalate_for_low_confidence(
+    tmp_path: Path,
+) -> None:
+    article = make_article(title="Neutral low-materiality article")
+    gateway = FakeBatchGateway(
+        [article],
+        lambda item, _: _assessment(
+            item,
+            sentiment_label=SentimentLabel.neutral,
+            sentiment_score=0.0,
+            confidence=0.40,
+            relevance=0.90,
+            materiality=0.10,
+        ),
+    )
+    result = _classifier(tmp_path, gateway).classify_many(
+        [article],
+        ticker="AAPL.US",
+        company_name="Apple Inc.",
+        prompt_variant="evidence_v2",
+        budget_limit_usd=1.0,
+    )
+
+    assert gateway.stage_calls == [("first_pass", "gpt-5.4-mini", 1)]
+    assert result.final_records[0].stage == "first_pass"
 
 
 def test_validation_failure_is_charged_then_escalated(tmp_path: Path) -> None:
