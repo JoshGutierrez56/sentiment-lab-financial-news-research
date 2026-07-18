@@ -1,0 +1,15 @@
+dataset_version: openai_calibration_v1
+experiment_id: 20260718T232828Z_70aaf344
+source_commit: b703114
+data_snapshot_id: b2ab96dc53588be1
+prompt_version: evidence_v2.1.0-cost
+schema_version: article_assessment.v2
+source_artifacts:
+  articles.parquet: b8f8fcc445b5c4387ef242db3c6f5e07edf9e4593e8399955d41779766b91af0
+  assessments.parquet: eae110c3c0c7f7454049532885f27c0a640ab3fe361f5f66941b6d04bdcc1d42
+  classification_ledger.parquet: 2088daa9ff91e1420b79778d83a370c81fa3dd616544e0f4078a223f3531c5df
+  events.parquet: 3c853737291bc138acc7ab7970c19af64151e94c6db639bbe86374412f4bf0bc
+  manifest.json: 14e8ecc63276b6fc0af4fe0cf93d6c80468dc2d7375189a2a8a3f5fae572d8b8
+  metrics.json: 765415624e455c29a38e7df3cb1c319a3f1bfb04300c728017931c15e1a91957
+  report.html: 217d6159c94cfdd9d1312f30d5720f6ac5ffd006b3757fea2fb136d3e974dd76
+

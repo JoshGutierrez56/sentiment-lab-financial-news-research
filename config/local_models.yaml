@@ -1,0 +1,31 @@
+name: openai_calibration_v1_local_benchmark
+calibration_dataset_path: data/normalized/calibration/openai_calibration_v1/calibration.parquet
+calibration_manifest_path: data/normalized/calibration/openai_calibration_v1/manifest.json
+electricity_rate_usd_per_kwh: 0.25
+telemetry_interval_seconds: 0.5
+predictive_floor: -0.10
+predictive_target: 0.20
+runtime_target_articles_per_minute: 10.0
+projected_electricity_target_usd: 0.50
+selection_weights:
+  predictive_performance: 0.35
+  openai_agreement: 0.25
+  valid_output: 0.15
+  tradable_coverage: 0.10
+  runtime: 0.10
+  electricity_cost: 0.05
+models:
+  - model: qwen3.5:latest
+    quantization: Q4_K_M
+    context_window: 8192
+    max_output_tokens: 256
+    temperature: 0.0
+    seed: 20260718
+    maximum_validation_attempts: 3
+  - model: qwen3.6:35b-a3b
+    quantization: Q4_K_M
+    context_window: 8192
+    max_output_tokens: 256
+    temperature: 0.0
+    seed: 20260718
+    maximum_validation_attempts: 3
