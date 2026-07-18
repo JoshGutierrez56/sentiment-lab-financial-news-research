@@ -54,18 +54,17 @@ def make_assessment(
     ticker: str = "AAPL.US",
 ) -> ArticleAssessment:
     return ArticleAssessment(
-        article_id=article.article_id,
-        ticker=ticker,
-        event_timestamp=article.provider_timestamp,
         sentiment_label=label,
         sentiment_score=score,
         confidence=confidence,
         relevance=0.95,
+        materiality=0.60,
+        novelty=0.80,
         event_type=EventType.guidance,
         expected_horizon=ExpectedHorizon.three_days,
         concise_reasoning="Raised guidance is incrementally positive for expected cash flows.",
         tradable=True,
-        abstain_reason=None,
+        abstain=False,
     )
 
 
@@ -75,6 +74,8 @@ def make_call(article: NewsArticle, **kwargs: object) -> ModelCall:
         usage=ModelUsage(input_tokens=100, output_tokens=30, estimated_cost_usd=0.001),
         response_id="resp_test",
         response_model="test-model",
+        batch_id="batch_test",
+        batch_custom_id=f"test-{article.article_id[:8]}",
     )
 
 
@@ -84,11 +85,18 @@ def make_record(article: NewsArticle, **kwargs: object) -> ClassificationRecord:
         cache_key="c" * 64,
         input_hash="d" * 64,
         output_hash=assessment_hash(assessment),
+        article_id=article.article_id,
+        ticker="AAPL.US",
+        event_timestamp=article.provider_timestamp,
+        requested_model="test-model",
         model="test-model",
-        prompt_version="evidence_v2.0.0",
-        schema_version="article_assessment.v1",
+        prompt_version="evidence_v2.1.0-cost",
+        schema_version="article_assessment.v2",
+        stage="first_pass",
         classified_at=datetime(2026, 5, 2, tzinfo=UTC),
         response_id="resp_test",
+        batch_id="batch_test",
+        batch_custom_id=f"test-{article.article_id[:8]}",
         usage=ModelUsage(input_tokens=100, output_tokens=30, estimated_cost_usd=0.001),
         assessment=assessment,
     )

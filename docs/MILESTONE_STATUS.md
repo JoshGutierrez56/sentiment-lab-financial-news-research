@@ -4,112 +4,114 @@ Status date: 2026-07-18
 
 Branch: `agent/openai-eodhd-rebuild`
 
-Research conclusion: **INCONCLUSIVE — live ChatGPT classification is blocked**
+Research conclusion: **INCONCLUSIVE — live OpenAI classification is blocked**
 
-## What ran against the real provider
+## Current state
 
-Command:
+The cost-optimized EODHD-to-OpenAI-to-return implementation is complete and
+validated with deterministic mocked Batch responses. The existing real
+12-article provider sample was rerun from cache, but no OpenAI request was made
+because the local runtime has no `OPENAI_API_KEY`.
+
+The live-data selection command was:
 
 ```powershell
-uv run sentiment-lab data sync --config config/experiments/milestone.yaml --refresh
+uv run sentiment-lab data sync --config config/experiments/milestone.yaml
 ```
 
-EODHD returned a candidate pool of 500 unique `AAPL.US` news records and 48
-daily price rows. The deterministic date-diverse selector retained 12 unique
-full-text articles:
+It produced snapshot `0892e81701aab621`:
 
-- Snapshot ID: `4cc8af37fb51617d`
-- Selected publication range: 2026-06-05 16:14:00 UTC through
-  2026-06-15 06:31:07 UTC
-- Distinct UTC publication dates: 11
-- Maximum selected articles on one date: 2
-- Non-empty article bodies: 12 of 12
-- Article-body length: 171 minimum, 3,719 median, 6,992 maximum characters
-- Exact article-provided `AAPL.US` mapping: 12 of 12
-- Price range: 2026-05-01 through 2026-07-10
-- Duplicate price dates: 0
-- Article Parquet SHA-256:
-  `c8299ce723aff6ad11d3f8bdd9ef5bb244a3f171e0d9aeb0d73a1f488ef4fb6a`
-- Price Parquet SHA-256:
-  `132bc48335976ecc05d09c52a02488eae491077c619e396d1bfd3dc5fd8098bf`
+- 500 articles considered.
+- 488 filtered before OpenAI.
+- 33 inadequate-text articles skipped.
+- 33 broad market summaries skipped.
+- Four duplicate stories skipped.
+- 418 otherwise eligible records excluded by the 12-article smoke cap.
+- Zero out-of-window or low-confidence direct ticker mappings.
+- 12 full-text articles selected; zero headline-only articles.
+- Publication range: 2026-06-05 16:30:12 UTC through 2026-06-15 06:31:07 UTC.
+- 11 distinct UTC publication dates.
+- Normalized article bodies: 2,019 minimum and 6,958 maximum characters.
+- 48 adjusted daily price rows.
 
-Provider-licensed article bodies and generated data files remain ignored by
-Git. The hashes make the local snapshot identifiable without republishing it.
+Provider-licensed text and generated data remain ignored by Git.
 
-## Timing validation on the real snapshot
+## Timing validation
 
-The real articles and prices were passed through the production alignment
-engine with clearly labeled neutral fixture assessments solely to validate
-timing; these fixtures were not saved as research results and are not ChatGPT
-outputs.
+Neutral fixture assessments were used only to exercise the alignment engine;
+they were not stored or represented as ChatGPT research results.
 
-- Entries after publication: 12 of 12
-- Available conservative entries: 12 of 12
-- Available adjusted 1-day returns: 12 of 12
-- Available adjusted 3-day returns: 12 of 12
-- Available adjusted 5-day returns: 12 of 12
-- Distinct entry dates: 7
-- Distinct 1-day realized returns: 7
+- Entries strictly after publication: 12 of 12.
+- Available adjusted 1-day returns: 12 of 12.
+- Available adjusted 3-day returns: 12 of 12.
+- Available adjusted 5-day returns: 12 of 12.
+- Distinct conservative entry dates: seven.
 
-Dedicated automated tests also cover Friday after-hours publication, weekend
-roll-forward, same-day exclusion, adjusted-open scaling, missing horizons, and
-article/classification timestamp mismatch rejection.
+## OpenAI cost controls
+
+- First pass: `gpt-5.4-mini` through Batch `/v1/responses`.
+- Selective escalation: `gpt-5.4` only after the complete first pass.
+- Pro models: prohibited.
+- Strict output: the 11 requested fields only; reasoning is at most 40 words.
+- Output cap: 256 tokens for either model.
+- Permanent key: content hash + ticker + model + prompt version + schema
+  version.
+- Smoke/first-sample/expanded hard limits: $1/$5/$20.
+- Batch state is resumable and output is joined by `custom_id`, not file order.
+
+The conservative pre-submit ceiling for this 12-article snapshot is:
+
+| Stage | Maximum estimate |
+|---|---:|
+| All 12 mini first passes | $0.04404225 |
+| All 12 expensive escalations | $0.14673250 |
+| Combined worst case | $0.19077475 |
+| Smoke limit | $1.00000000 |
+
+No upload occurred during this estimate.
 
 ## Automated verification
 
 ```text
-Ruff:       PASS
-MyPy:      PASS (23 source files)
-Pytest:    PASS (39 tests)
-Coverage:  PASS (91.83%; gate 85%)
-Python:    PASS on 3.11.15 and 3.12.10
+Ruff format: PASS
+Ruff lint:   PASS
+MyPy:       PASS (23 source files)
+Pytest:     PASS (41 tests)
+Coverage:   PASS (90.16%; gate 85%)
 ```
 
-The mocked integration test runs the full article → structured assessment →
-future return → metrics/report pipeline twice. Articles, assessments, events,
-and metrics have identical hashes; the second manifest records three cache hits
-and zero new model tokens while preserving the original classification ledger.
-An HTTP-level contract test also exercises the installed official OpenAI SDK's
-`responses.parse` implementation and verifies its generated strict schema,
-parsed Pydantic output, returned model/response IDs, and token usage.
+Tests cover JSONL request shape, strict output fields, unordered Batch output,
+remote-batch resume without re-upload, conservative preflight rejection before
+upload, exact Batch pricing with cached tokens, permanent cache hits, within-run
+deduplication, all escalation triggers, filter accounting, full-text priority,
+timestamp leakage, adjusted returns, report/manifests, and deterministic reruns.
 
-## Security finding and remediation
+## Exact blocker and next command
 
-The first live sync exposed a defect in console logging: HTTPX's INFO request
-line included EODHD's query-parameter credential. No credential was written to
-the repository or data cache, but it appeared in the private execution output.
-
-Remediation completed:
-
-1. HTTPX/HTTPCore request logging is forced to WARNING by the CLI.
-2. The EODHD client emits its own sanitized endpoint/parameter log.
-3. A fresh live request confirmed that only the sanitized log is rendered.
-4. Every persisted file under `data/` was scanned against the runtime token;
-   credential matches: zero.
-5. A regression test asserts that request logs contain neither the token nor an
-   `api_token` field.
-
-Because the credential appeared in execution output, rotating the EODHD token
-is still prudent before longer experiments.
-
-## Exact blocker
-
-`OPENAI_API_KEY` is absent. Running:
+The command:
 
 ```powershell
 uv run sentiment-lab milestone run --config config/experiments/milestone.yaml
 ```
 
-therefore exits cleanly with:
+stops cleanly before provider or OpenAI work with:
 
 ```text
-Error: OPENAI_API_KEY is required for real ChatGPT classification.
+Error: OPENAI_API_KEY is required for real ChatGPT classification. Cached downloads and mocked tests do not require it.
 ```
 
-No real sentiment labels, confidence values, reasoning, token costs, accuracy,
-or IC values have been fabricated. To unblock, set both `OPENAI_API_KEY` and a
-current Structured-Outputs-capable `OPENAI_MODEL` in the untracked `.env`, then
-run the command above once. A completed run will write `articles.parquet`,
-`assessments.parquet`, `events.parquet`, `metrics.json`, `manifest.json`, and
-`report.html`. Repeating it without `--refresh` or `--force-classify` performs
-the cached reproducibility run.
+Configure the key locally in the untracked `.env`—do not paste it into chat—and
+rerun that command. A complete run will report articles considered/filtered,
+mini classifications, escalations, cache hits, exact token totals, total and
+average cost, correctly aligned returns, accuracy, and IC.
+
+The next size is 100 articles under the $5 tier, but it must not run until the
+12-article classifications are inspected for schema quality, abstention,
+relevance, ticker specificity, escalation behavior, and return alignment.
+
+## Security note
+
+An earlier EODHD smoke request exposed its query token in private HTTPX INFO
+output. Transport logging was subsequently forced to WARNING, sanitized client
+logging was added, and persisted data was scanned with zero token matches.
+Rotating that EODHD token remains prudent.

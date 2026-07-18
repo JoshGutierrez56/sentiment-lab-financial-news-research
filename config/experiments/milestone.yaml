@@ -11,3 +11,4 @@ execution_policy: conservative_next_day_open
 neutral_return_bps: 10.0
 random_seed: 1729
 prompt_variant: evidence_v2
+spending_limit_tier: smoke

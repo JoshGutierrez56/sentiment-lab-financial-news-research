@@ -1,5 +1,11 @@
 prompt_variant: evidence_v2
-schema_version: article_assessment.v1
+schema_version: article_assessment.v2
 max_article_characters: 16000
+minimum_article_characters: 200
+classify_headline_only: false
+ticker_mapping_confidence_threshold: 0.95
+market_summary_symbol_threshold: 5
 minimum_confidence: 0.0
 minimum_relevance: 0.0
+escalation_confidence_threshold: 0.70
+escalation_materiality_threshold: 0.80

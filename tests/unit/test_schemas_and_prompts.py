@@ -59,28 +59,27 @@ def test_adjusted_open_uses_same_day_adjustment_factor() -> None:
 
 def test_assessment_enforces_direction_and_abstention(article: NewsArticle) -> None:
     base = {
-        "article_id": article.article_id,
-        "ticker": "aapl.us",
-        "event_timestamp": article.provider_timestamp,
         "sentiment_label": "bullish",
         "sentiment_score": 0.8,
         "confidence": 0.9,
         "relevance": 0.9,
+        "materiality": 0.8,
+        "novelty": 0.7,
         "event_type": "guidance",
         "expected_horizon": "3d",
         "concise_reasoning": "Guidance rose.",
         "tradable": True,
-        "abstain_reason": None,
+        "abstain": False,
     }
     parsed = ArticleAssessment.model_validate(base)
-    assert parsed.ticker == "AAPL.US"
     assert parsed.sentiment_label is SentimentLabel.bullish
     with pytest.raises(ValidationError, match="positive sentiment_score"):
         ArticleAssessment.model_validate({**base, "sentiment_score": -0.2})
-    with pytest.raises(ValidationError, match="require abstain_reason"):
+    with pytest.raises(ValidationError, match="logical opposites"):
         ArticleAssessment.model_validate({**base, "tradable": False})
-    with pytest.raises(ValidationError, match="cannot include abstain_reason"):
-        ArticleAssessment.model_validate({**base, "abstain_reason": "unclear"})
+    with pytest.raises(ValidationError, match="no more than 40 words"):
+        ArticleAssessment.model_validate({**base, "concise_reasoning": "word " * 41})
+    assert set(ArticleAssessment.model_json_schema()["properties"]) == set(base)
 
 
 def test_prompt_quotes_untrusted_article_and_has_two_variants() -> None:
@@ -100,7 +99,9 @@ def test_prompt_quotes_untrusted_article_and_has_two_variants() -> None:
         max_characters=30,
     )
     assert "untrusted quoted source material" in first[0]["content"]
-    assert article.article_id in first[1]["content"]
+    assert first[0] == second[0]
+    assert article.article_id not in first[1]["content"]
+    assert "publication_timestamp" in first[1]["content"]
     assert "IGNORE SYSTEM" in first[1]["content"]
     assert "determine company relevance" in second[1]["content"]
     assert "x" * 31 not in first[1]["content"]

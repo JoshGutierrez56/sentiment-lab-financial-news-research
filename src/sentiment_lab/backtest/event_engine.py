@@ -38,9 +38,9 @@ def align_events(
     ordered_prices = sorted(prices, key=lambda item: item.date)
     records: list[dict[str, object]] = []
     for article, classification in zip(articles, classifications, strict=True):
-        if classification.assessment.article_id != article.article_id:
+        if classification.article_id != article.article_id:
             raise ValueError("classification/article identity mismatch")
-        if classification.assessment.event_timestamp != article.provider_timestamp:
+        if classification.event_timestamp != article.provider_timestamp:
             raise ValueError("classification/article timestamp mismatch")
         local_publication = article.provider_timestamp.astimezone(NEW_YORK)
         entry_index = next(
@@ -53,7 +53,7 @@ def align_events(
         )
         row: dict[str, object] = {
             "article_id": article.article_id,
-            "ticker": classification.assessment.ticker,
+            "ticker": classification.ticker,
             "publication_timestamp_utc": article.provider_timestamp,
             "publication_timestamp_local": local_publication,
             "title": article.title,
@@ -64,12 +64,17 @@ def align_events(
             "sentiment_score": classification.assessment.sentiment_score,
             "confidence": classification.assessment.confidence,
             "relevance": classification.assessment.relevance,
+            "materiality": classification.assessment.materiality,
+            "novelty": classification.assessment.novelty,
             "event_type": classification.assessment.event_type.value,
             "expected_horizon": classification.assessment.expected_horizon.value,
             "reasoning": classification.assessment.concise_reasoning,
             "tradable": classification.assessment.tradable,
-            "abstain_reason": classification.assessment.abstain_reason,
+            "abstain": classification.assessment.abstain,
             "openai_model": classification.model,
+            "openai_requested_model": classification.requested_model,
+            "classification_stage": classification.stage,
+            "escalation_reasons": classification.escalation_reasons,
             "prompt_version": classification.prompt_version,
             "classification_cache_key": classification.cache_key,
         }

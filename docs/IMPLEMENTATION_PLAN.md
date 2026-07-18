@@ -44,9 +44,10 @@ infrastructure, and broad experiment frameworks are explicitly deferred.
   exchange-calendar responses.
 - Normalizers with stable article IDs, UTC timestamps, deduplication, Parquet
   storage, and DuckDB views.
-- OpenAI Responses API structured parser with a strict Pydantic schema, two
-  versioned prompts, retry/repair, deterministic cache keys, usage/cost ledger,
-  and bounded concurrency.
+- OpenAI Batch API over `/v1/responses` with a strict Pydantic schema, fixed
+  system prompt, two versioned prompt variants, permanent exact-configuration
+  cache, per-article usage/cost ledger, conservative budget preflight, and a
+  selective second-model escalation batch after the first pass completes.
 - Unit/integration tests use injected HTTP transports and deterministic model
   fixtures. A licensed EODHD probe runs separately from the test suite.
 

@@ -1,46 +1,83 @@
 # Sentiment Lab
 
-Sentiment Lab is an evidence-first research pipeline for one deliberately narrow
-question: does ChatGPT's interpretation of an EODHD news article predict the
-specified company's subsequent stock return?
+Sentiment Lab currently answers one deliberately narrow question: does a
+structured OpenAI assessment of an EODHD article predict the specified
+company's subsequent stock return?
 
-The current milestone does exactly this:
+Advanced portfolios, factors, dashboards, and large experiment frameworks are
+deferred until this article-to-return milestone has run successfully with real
+OpenAI classifications.
 
-1. Download and preserve EODHD news and adjusted EOD prices.
-2. Select a deterministic, date-diverse sample of full-text articles directly
-   mapped by EODHD to one ticker.
-3. Ask OpenAI for a strict bullish, bearish, or neutral assessment with score,
-   confidence, relevance, event type, horizon, concise reasoning, and an
-   explicit abstention decision.
-4. Cache the validated structured response by the complete classification
-   input, model, prompt version, and schema version.
-5. Enter at the first market open strictly after the article's New York
-   publication date and measure adjusted 1/3/5-trading-day returns.
-6. Write article-level evidence, directional accuracy, and information
-   coefficients to Parquet, JSON, DuckDB views, and a self-contained HTML
-   report.
+## Core execution path
 
-Advanced portfolio construction, factors, dashboards, broad universe tooling,
-and parameter sweeps are intentionally deferred until this vertical slice has
-run with real ChatGPT classifications.
+1. Download and immutably cache EODHD news and adjusted EOD prices.
+2. Before OpenAI, reject out-of-window articles, uncertain ticker mappings,
+   inadequate text, broad market summaries, and duplicate stories.
+3. Keep full text and headline-only records separate; the active configuration
+   excludes headline-only records and always prioritizes full text.
+4. Submit all uncached first-pass requests through the OpenAI Batch API to
+   `/v1/responses` using `gpt-5.4-mini` and a strict structured-output schema.
+5. After that batch is complete, submit a second `gpt-5.4` batch only for
+   low-confidence, high-materiality, contradictory, specified major-event, or
+   invalid-output cases. Pro models are rejected by configuration validation.
+6. Permanently cache each validated result by article-content hash, ticker,
+   model, prompt version, and schema version. Identical work is never submitted
+   twice, including duplicates within one run.
+7. Enter at the first market open strictly after the New York publication date
+   and measure adjusted 1/3/5-trading-day returns.
+8. Write article evidence, accuracy/IC metrics, per-attempt token/cost ledgers,
+   an immutable manifest, DuckDB views, and a self-contained HTML report.
+
+The model returns only sentiment score/label, confidence, relevance,
+materiality, novelty, event type, expected horizon, tradable/abstain flags, and
+concise reasoning capped at 40 words. Article identity and timestamps come from
+the trusted local record rather than being echoed by the model.
+
+## Cost controls
+
+The fixed system prompt is shared across requests and a stable prompt-cache key
+is supplied. Output is capped at 256 tokens for both models. Published Batch
+rates are versioned in `config/settings.yaml`; every API result records exact
+input, cached-input, output, and reasoning tokens plus estimated USD cost.
+
+| Run tier | Hard limit |
+|---|---:|
+| Smoke test | $1 |
+| First research sample | $5 |
+| Expanded validation | $20 |
+
+Before uploading JSONL, the client computes a conservative maximum using one
+input token per UTF-8 request byte, an additional overhead allowance, and the
+full output cap. A batch that cannot fit within the remaining run budget stops
+before upload. Batch state is content-addressed, so an interrupted local run
+resumes the same remote batch instead of resubmitting it.
+
+The implementation follows the official [Batch API guide](https://developers.openai.com/api/docs/guides/batch),
+[Structured Outputs guide](https://developers.openai.com/api/docs/guides/structured-outputs),
+[prompt-caching guide](https://developers.openai.com/api/docs/guides/prompt-caching),
+and [pricing page](https://developers.openai.com/api/docs/pricing).
 
 ## Verified status
 
-As of 2026-07-18:
+As of 2026-07-18, the cached EODHD smoke selection ran successfully:
 
-- A live EODHD sync succeeded for `AAPL.US`: 500 candidate records were cached,
-  then 12 unique full-text articles were selected across 11 publication dates.
-- Article timestamps are stored as timezone-aware UTC Parquet values; price
-  dates are native Parquet dates.
-- The real sample has seven distinct conservative entry dates and complete
-  adjusted 1/3/5-day returns. Every entry is later than publication.
-- Raw and normalized artifacts were scanned for the EODHD credential: zero
-  persisted matches.
-- Ruff and strict MyPy pass. The test suite passes with more than 90% package
-  coverage on both Python 3.11 and 3.12, including mocked HTTP/OpenAI
-  integration and cached-rerun tests.
-- A live OpenAI run has not run because `OPENAI_API_KEY` is absent from the
-  runtime environment. Therefore no trading conclusion is claimed yet.
+- 500 `AAPL.US` articles considered; 488 filtered before OpenAI.
+- Pre-request exclusions: 33 inadequate-text records, 33 broad market
+  summaries, four duplicate stories, and 418 records beyond the 12-item sample
+  cap. No ticker-mapping or date-window failures occurred.
+- 12 full-text articles selected across 11 UTC publication dates; no
+  headline-only records selected.
+- 48 adjusted price rows; all 12 events have conservative entries and available
+  adjusted 1/3/5-day returns, with every entry strictly after publication.
+- Conservative no-submit cost ceiling: $0.044043 for the mini batch and
+  $0.146733 more if all 12 articles escalate, or $0.190775 combined against the
+  $1 smoke limit.
+- Ruff, strict MyPy, and 41 tests pass; package coverage is 90.16% against an
+  85% gate.
+
+`OPENAI_API_KEY` is not configured in the current local runtime. Consequently,
+no paid batch was submitted and no real sentiment, accuracy, or IC result is
+claimed. The research conclusion remains **INCONCLUSIVE**.
 
 ## Install
 
@@ -54,63 +91,56 @@ uv sync --extra dev
 Copy-Item .env.example .env
 ```
 
-Populate the untracked `.env` file:
+Populate the untracked `.env` without pasting credentials into chat:
 
 ```dotenv
 EODHD_API_TOKEN=...
 OPENAI_API_KEY=...
-OPENAI_MODEL=...
 DATA_ROOT=./data
 DUCKDB_PATH=./data/research.duckdb
 LOG_LEVEL=INFO
 ```
 
-`OPENAI_MODEL` is intentionally not hardcoded. Select a currently supported
-model that supports Structured Outputs in the Responses API. Credentials are
-loaded only at runtime. Do not commit `.env`.
+The first-pass and escalation models live in validated YAML, not environment
+variables. The defaults are `gpt-5.4-mini` and `gpt-5.4`.
 
-## Run the core milestone
+## Run the smoke milestone
 
-Download fresh EODHD data and preserve each raw response before normalization:
+Reuse the cached provider responses and inspect all filter counts:
 
 ```powershell
-uv run sentiment-lab data sync --config config/experiments/milestone.yaml --refresh
+uv run sentiment-lab data sync --config config/experiments/milestone.yaml
 ```
 
-Run the complete real article-to-return pipeline:
+Run the complete cost-bounded Batch workflow after configuring the OpenAI key:
 
 ```powershell
 uv run sentiment-lab milestone run --config config/experiments/milestone.yaml
 ```
 
-Do not add `--refresh` or `--force-classify` on a reproducibility rerun. The
-command will then use the raw EODHD cache and content-addressed OpenAI cache.
-The scientific artifacts (`articles.parquet`, `assessments.parquet`,
-`events.parquet`, and `metrics.json`) are byte-stable. The report and manifest
-receive a new run identity and timestamp; the manifest records cache hits and
-zero per-run OpenAI tokens/cost while retaining original ledger usage.
+Do not add `--refresh` to a reproducibility rerun. EODHD and permanent OpenAI
+caches are reused automatically; there is intentionally no force-reclassify
+option.
 
-Each completed run creates `data/results/<experiment-id>/` containing:
+Each completed result directory contains:
 
-- `articles.parquet` — provider text, original publication time, retrieval time,
-  symbols, provider sentiment, and raw-response hash.
-- `assessments.parquet` — ChatGPT label, score, confidence, relevance, concise
-  reasoning, abstention, model/prompt/schema versions, token usage, and cost.
-- `events.parquet` — the joined article/assessment plus entry timestamp and
-  future adjusted returns.
+- `articles.parquet` — provider text, timestamps, symbols, provider sentiment,
+  raw-response hash, and full-text/headline-only type.
+- `assessments.parquet` — the final structured assessment, model/stage,
+  prompt/schema/cache hashes, tokens, and estimated historical classification
+  cost.
+- `classification_ledger.parquet` — every mini/escalation/cache attempt with
+  exact usage, estimated cost, current-run cost, batch IDs, and failure reason.
+- `events.parquet` — article, final assessment, conservative entry, and future
+  adjusted returns.
 - `metrics.json` — coverage, directional accuracy, Spearman IC, Pearson
   correlation, confidence-weighted IC, and per-label returns.
-- `manifest.json` — git/config/data hashes, exact versions and parameters,
-  provider endpoints, Python/SDK/library versions, artifact hashes, cache
-  hits/misses, per-run token/cost totals, classification-ledger usage, and
-  summary metrics.
-- `report.html` — a compact human-readable evidence table and metrics report.
+- `manifest.json` — git/config/data/artifact hashes, filter counts, Batch IDs,
+  requested/returned models, budget ceiling, exact run usage/cost, and metrics.
+- `report.html` — compact evidence, filter, classification, cost, and return
+  tables.
 
-The latest normalized tables are also exposed in `data/research.duckdb` as
-`milestone_articles_latest`, `milestone_prices_latest`,
-`milestone_assessments_latest`, and `milestone_events_latest`.
-
-## Validate the implementation
+## Validate
 
 ```powershell
 uv run ruff format --check .
@@ -119,67 +149,23 @@ uv run mypy src/sentiment_lab
 uv run pytest
 ```
 
-Or run all checks with:
+## Timing and interpretation
 
-```powershell
-make check
-```
+The active policy is `conservative_next_day_open`: ignore the publication's
+local market date, enter at 09:30 New York time on the first later EODHD trading
+date, and back-adjust the raw open using that session's close adjustment factor.
+The engine rejects identity/timestamp mismatches and proves the entry is after
+the article.
 
-Tests never require paid credentials. They cover strict config rejection,
-EODHD pagination/retry/rate-limit/schema behavior, immutable raw caching, token
-redaction, OpenAI structured parsing and semantic repair, concurrent cache
-safety, after-hours/weekend alignment, adjusted-open math, accuracy/IC metrics,
-DuckDB views, reports, and deterministic event artifacts.
+Directional accuracy maps returns within +/-10 bps to neutral. IC is Spearman
+correlation between the continuous score and future return. Abstained rows stay
+in evidence artifacts but are excluded from accuracy and IC.
 
-## Timing and return definition
-
-The active policy is `conservative_next_day_open`:
-
-- Convert the provider timestamp from UTC to `America/New_York`.
-- Ignore every price on that local publication date, even for pre-market news.
-- Enter at 09:30 New York time on the first later EODHD trading date.
-- Estimate adjusted open as `raw_open × adjusted_close / raw_close` for that
-  session so entry and exit values use a consistent split-adjusted scale.
-- A 1-day horizon exits at that entry session's adjusted close; 3-day and 5-day
-  horizons exit at the third and fifth trading-session adjusted closes.
-
-The engine rejects article/classification identity or timestamp mismatches and
-tests explicitly prove that no entry precedes its article.
-
-## Interpretation of the milestone metrics
-
-Directional accuracy maps realized returns within ±10 bps to neutral and uses
-their sign outside that band. IC is the Spearman correlation between ChatGPT's
-continuous sentiment score and the future return. Non-tradable/abstained rows
-remain in the evidence artifact but are excluded from accuracy and IC.
-
-These are descriptive smoke-test metrics. A 12-article sample is not evidence of
-statistical significance; overlapping returns violate IID assumptions, and the
-ordinary correlation p-values in the compact report do not correct dependence.
-HAC inference, block bootstrap, controls, placebos, costs, and untouched
-out-of-sample validation remain gated behind successful completion of this core
-pipeline.
-
-## Current limitations
-
-- The live sample covers one ticker and is selected from EODHD's most recent 500
-  candidate rows in the configured interval, with at most two articles per New
-  York publication date.
-- Mapping currently requires the exact requested ticker in EODHD's article
-  symbols. Ambiguous entity resolution abstention is a later milestone.
-- Provider timestamps are treated as first availability; article revision
-  history is unavailable in this endpoint and cannot yet be controlled.
-- EOD data cannot represent intraday reaction. The deliberately conservative
-  next-day-open rule avoids pretending otherwise.
-- Returns are raw company returns, not market- or factor-adjusted abnormal
-  returns.
-- No human-labeled sentiment evaluation has been performed.
-- Most importantly, the real ChatGPT classifications and resulting accuracy/IC
-  report remain blocked until an OpenAI key and model are supplied.
-
-See [repository audit](docs/REPOSITORY_AUDIT.md) and
-[implementation plan](docs/IMPLEMENTATION_PLAN.md) for provenance, reuse, and
-the gated roadmap.
+A 12-article, one-ticker smoke sample cannot establish significance. HAC/block
+bootstrap inference, baselines, costs, walk-forward validation, and an untouched
+test remain gated behind successful real classification of this vertical slice.
+See [milestone status](docs/MILESTONE_STATUS.md), [repository audit](docs/REPOSITORY_AUDIT.md),
+and [implementation plan](docs/IMPLEMENTATION_PLAN.md).
 
 ## License
 

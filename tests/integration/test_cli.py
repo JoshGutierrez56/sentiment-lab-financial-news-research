@@ -14,7 +14,6 @@ def test_missing_openai_key_is_actionable_without_traceback() -> None:
         env={
             "EODHD_API_TOKEN": "test-token",
             "OPENAI_API_KEY": "",
-            "OPENAI_MODEL": "test-model",
         },
     )
     assert result.exit_code == 1

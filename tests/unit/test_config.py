@@ -9,7 +9,7 @@ import pytest
 from pydantic import ValidationError
 
 from sentiment_lab.config.loader import load_app_config, load_experiment_config, load_yaml
-from sentiment_lab.config.models import ExperimentConfig, RuntimeSecrets
+from sentiment_lab.config.models import ExperimentConfig, OpenAIConfig, RuntimeSecrets
 
 
 def test_unknown_yaml_field_is_rejected(tmp_path: Path) -> None:
@@ -70,13 +70,25 @@ def test_missing_runtime_credentials_fail_with_actionable_messages() -> None:
     runtime = RuntimeSecrets(
         eodhd_api_token=None,
         openai_api_key=None,
-        openai_model=None,
         _env_file=None,
     )
     with pytest.raises(RuntimeError, match="EODHD_API_TOKEN"):
         runtime.require_eodhd_token()
     with pytest.raises(RuntimeError, match="OPENAI_API_KEY"):
-        runtime.require_openai()
+        runtime.require_openai_key()
+
+
+def test_cost_control_defaults_and_pro_models_are_guarded() -> None:
+    config = OpenAIConfig()
+    assert config.first_pass_model == "gpt-5.4-mini"
+    assert config.escalation_model == "gpt-5.4"
+    assert config.first_pass_max_output_tokens == 256
+    assert config.escalation_max_output_tokens == 256
+    assert config.spending_limits_usd.smoke == 1.0
+    assert config.spending_limits_usd.first_research_sample == 5.0
+    assert config.spending_limits_usd.expanded_validation == 20.0
+    with pytest.raises(ValidationError, match="Pro models are prohibited"):
+        OpenAIConfig(escalation_model="gpt-5.4-pro")
 
 
 def test_load_yaml_rejects_missing_and_non_mapping(tmp_path: Path) -> None:

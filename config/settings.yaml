@@ -9,11 +9,31 @@ eodhd:
 openai:
   timeout_seconds: 60.0
   max_retries: 3
-  max_concurrency: 3
-  temperature: 0.0
-  max_output_tokens: 700
-  input_cost_per_million: null
-  output_cost_per_million: null
+  first_pass_model: gpt-5.4-mini
+  escalation_model: gpt-5.4
+  first_pass_max_output_tokens: 256
+  escalation_max_output_tokens: 256
+  reasoning_effort: none
+  batch_poll_interval_seconds: 10.0
+  batch_wait_timeout_seconds: 3600.0
+  input_token_estimate_overhead: 512
+  prompt_cache_key_prefix: sentiment-lab-article-v2
+  regional_processing_multiplier: 1.0
+  pricing_source_url: https://developers.openai.com/api/docs/pricing
+  pricing_as_of: 2026-07-18
+  batch_pricing:
+    gpt-5.4-mini:
+      input_per_million: 0.375
+      cached_input_per_million: 0.0375
+      output_per_million: 2.25
+    gpt-5.4:
+      input_per_million: 1.25
+      cached_input_per_million: 0.13
+      output_per_million: 7.50
+  spending_limits_usd:
+    smoke: 1.0
+    first_research_sample: 5.0
+    expanded_validation: 20.0
 storage:
   data_root: ./data
   duckdb_path: ./data/research.duckdb

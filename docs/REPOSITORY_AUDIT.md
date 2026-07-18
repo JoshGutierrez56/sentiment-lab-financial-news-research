@@ -178,9 +178,10 @@ Current official documentation supports these integrations:
 - Metadata: `/api/exchanges-list/`, `/api/exchange-symbol-list/{exchange}` with
   `delisted=1`, and `/api/v2/exchange-details/{exchange}` for IANA timezone,
   sessions, holidays, and early closes.
-- OpenAI structured output: official Python SDK
-  `client.responses.parse(..., text_format=<Pydantic model>)`. The model remains
-  runtime-configured; no model identifier is hardcoded in source.
+- OpenAI historical classification: Batch API JSONL requests to
+  `/v1/responses` with Responses Structured Outputs. The active cost override
+  configures `gpt-5.4-mini` first pass and selective `gpt-5.4` escalation in
+  validated YAML, uses published Batch pricing, and prohibits Pro models.
 
 ## Initial risk register
 

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import os
+import unicodedata
 import uuid
 from pathlib import Path
 
@@ -16,6 +17,23 @@ def assessment_hash(assessment: ArticleAssessment) -> str:
     return hashlib.sha256(material.encode("utf-8")).hexdigest()
 
 
+def normalized_article_content(title: str, content: str) -> str:
+    """Canonicalize prompt-bearing article text without weakening auditability."""
+
+    normalized_title = " ".join(unicodedata.normalize("NFKC", title).split())
+    normalized_body = " ".join(unicodedata.normalize("NFKC", content).split())
+    return f"{normalized_title}\n{normalized_body}"
+
+
+def article_content_hash(title: str, content: str) -> str:
+    return hashlib.sha256(normalized_article_content(title, content).encode("utf-8")).hexdigest()
+
+
+def story_body_hash(content: str) -> str:
+    normalized = " ".join(unicodedata.normalize("NFKC", content).casefold().split())
+    return hashlib.sha256(normalized.encode("utf-8")).hexdigest()
+
+
 class ClassificationCache:
     def __init__(self, data_root: str | Path) -> None:
         self.root = Path(data_root) / "features" / "openai_cache"
@@ -23,25 +41,22 @@ class ClassificationCache:
     @staticmethod
     def key(
         *,
-        article_content: str,
+        article_content_hash: str,
         ticker: str,
-        company_name: str,
         prompt_version: str,
         schema_version: str,
         model: str,
-    ) -> tuple[str, str]:
-        input_hash = hashlib.sha256(article_content.encode("utf-8")).hexdigest()
+    ) -> str:
         material = stable_json(
             {
-                "input_hash": input_hash,
+                "article_content_hash": article_content_hash,
                 "ticker": ticker.upper(),
-                "company_name": company_name,
                 "prompt_version": prompt_version,
                 "schema_version": schema_version,
                 "model": model,
             }
         )
-        return hashlib.sha256(material.encode("utf-8")).hexdigest(), input_hash
+        return hashlib.sha256(material.encode("utf-8")).hexdigest()
 
     def _path(self, key: str) -> Path:
         return self.root / key[:2] / f"{key}.json"
@@ -58,6 +73,11 @@ class ClassificationCache:
     def store(self, record: ClassificationRecord) -> Path:
         path = self._path(record.cache_key)
         path.parent.mkdir(parents=True, exist_ok=True)
+        if path.is_file():
+            existing = ClassificationRecord.model_validate_json(path.read_text(encoding="utf-8"))
+            if existing.output_hash != record.output_hash:
+                raise ValueError(f"Refusing to overwrite conflicting OpenAI cache record: {path}")
+            return path
         temporary = path.with_name(f".{path.name}.{uuid.uuid4().hex}.tmp")
         temporary.write_text(record.model_dump_json(indent=2), encoding="utf-8")
         os.replace(temporary, path)

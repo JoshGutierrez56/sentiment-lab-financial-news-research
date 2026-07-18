@@ -20,6 +20,18 @@ table{border-collapse:collapse;width:100%;font-size:13px}th,td{border-bottom:1px
 </style></head><body>
 <h1>{{ title }}</h1><p class="meta">Experiment {{ experiment_id }} · ticker {{ ticker }} · generated {{ generated_at }}</p>
 <p class="warn">{{ metrics.definition }}</p>
+<h2>Cost-controlled classification</h2><div class="cards">
+<div class="card"><strong>Considered</strong><br>{{ filtering.total_articles_considered }}</div>
+<div class="card"><strong>Filtered before OpenAI</strong><br>{{ filtering.articles_filtered_before_openai }}</div>
+<div class="card"><strong>Full text / headline</strong><br>{{ filtering.selected_full_text }} / {{ filtering.selected_headline_only }}</div>
+<div class="card"><strong>Mini-model API articles</strong><br>{{ classification.articles_classified_by_mini }}</div>
+<div class="card"><strong>Escalated articles</strong><br>{{ classification.articles_escalated }}</div>
+<div class="card"><strong>Cache hits</strong><br>{{ classification.cache_hits }}</div>
+<div class="card"><strong>Total tokens</strong><br>{{ classification.total_tokens }}</div>
+<div class="card"><strong>Total cost</strong><br>${{ classification.total_cost_usd }}</div>
+<div class="card"><strong>Average/article</strong><br>${{ classification.average_cost_per_article_usd }}</div>
+<div class="card"><strong>Budget</strong><br>${{ budget_limit_usd }} ({{ spending_limit_tier }})</div>
+</div>
 {% for horizon, metric in metrics.horizons.items() %}
 <h2>{{ horizon }} result</h2><div class="cards">
 <div class="card"><strong>N</strong><br>{{ metric.n }}</div>
@@ -28,8 +40,8 @@ table{border-collapse:collapse;width:100%;font-size:13px}th,td{border-bottom:1px
 <div class="card"><strong>IC p-value</strong><br>{{ metric.information_coefficient_p_value }}</div>
 <div class="card"><strong>Confidence-weighted IC</strong><br>{{ metric.confidence_weighted_ic_spearman }}</div>
 </div>{% endfor %}
-<h2>Article-level evidence</h2><div class="scroll"><table><thead><tr><th>Published (UTC)</th><th>Article</th><th>Assessment</th><th>Confidence</th><th>Reasoning</th>{% for h in horizons %}<th>{{ h }}d return</th>{% endfor %}</tr></thead><tbody>
-{% for row in rows %}<tr><td>{{ row.publication_timestamp_utc }}</td><td><strong>{{ row.title }}</strong><div class="article">{{ row.article_text }}</div></td><td class="{{ row.sentiment_label }}">{{ row.sentiment_label }} ({{ row.sentiment_score }})</td><td>{{ row.confidence }}</td><td class="reason">{{ row.reasoning }}</td>{% for h in horizons %}<td>{{ row['future_return_' ~ h ~ 'd'] }}</td>{% endfor %}</tr>{% endfor %}
+<h2>Article-level evidence</h2><div class="scroll"><table><thead><tr><th>Published (UTC)</th><th>Article</th><th>Assessment</th><th>Confidence</th><th>R / M / N</th><th>Model stage</th><th>Reasoning</th>{% for h in horizons %}<th>{{ h }}d return</th>{% endfor %}</tr></thead><tbody>
+{% for row in rows %}<tr><td>{{ row.publication_timestamp_utc }}</td><td><strong>{{ row.title }}</strong><div class="article">{{ row.article_text }}</div></td><td class="{{ row.sentiment_label }}">{{ row.sentiment_label }} ({{ row.sentiment_score }})</td><td>{{ row.confidence }}</td><td>{{ row.relevance }} / {{ row.materiality }} / {{ row.novelty }}</td><td>{{ row.openai_model }}<br>{{ row.classification_stage }}</td><td class="reason">{{ row.reasoning }}</td>{% for h in horizons %}<td>{{ row['future_return_' ~ h ~ 'd'] }}</td>{% endfor %}</tr>{% endfor %}
 </tbody></table></div>
 <h2>Reproducibility</h2><pre>{{ reproduction }}</pre>
 </body></html>"""
@@ -44,6 +56,10 @@ def build_milestone_report(
     ticker: str,
     horizons: list[int],
     generated_at: str,
+    filtering: dict[str, Any],
+    classification: dict[str, Any],
+    budget_limit_usd: float,
+    spending_limit_tier: str,
 ) -> Path:
     rows: list[dict[str, Any]] = []
     for row in events.to_dicts():
@@ -55,6 +71,8 @@ def build_milestone_report(
             rendered[key] = "—" if value is None else f"{float(value):.3%}"
         rendered["sentiment_score"] = f"{float(rendered['sentiment_score']):.2f}"
         rendered["confidence"] = f"{float(rendered['confidence']):.0%}"
+        for field in ("relevance", "materiality", "novelty"):
+            rendered[field] = f"{float(rendered[field]):.0%}"
         rows.append(rendered)
     environment = Environment(
         loader=BaseLoader(),
@@ -68,10 +86,20 @@ def build_milestone_report(
         metrics=metrics,
         rows=rows,
         horizons=horizons,
+        filtering=filtering,
+        classification={
+            **classification,
+            "total_cost_usd": f"{float(classification['total_cost_usd']):.6f}",
+            "average_cost_per_article_usd": (
+                f"{float(classification['average_cost_per_article_usd']):.6f}"
+            ),
+        },
+        budget_limit_usd=f"{budget_limit_usd:.2f}",
+        spending_limit_tier=spending_limit_tier,
         reproduction=json.dumps(
             {
                 "command": "sentiment-lab milestone run --config config/experiments/milestone.yaml",
-                "cached_rerun": "repeat the command without --refresh or --force-classify",
+                "cached_rerun": "repeat the command without --refresh; cached articles are never reclassified",
             },
             indent=2,
         ),

@@ -53,11 +53,7 @@ def test_alignment_rejects_identity_timestamp_and_bad_market_data() -> None:
     with pytest.raises(ValueError, match="identity mismatch"):
         align_events([article], [make_record(other)], prices, horizons=[1])
     bad_timestamp_record = make_record(article).model_copy(
-        update={
-            "assessment": make_record(article).assessment.model_copy(
-                update={"event_timestamp": datetime(2026, 5, 1, 20, 0, tzinfo=UTC)}
-            )
-        }
+        update={"event_timestamp": datetime(2026, 5, 1, 20, 0, tzinfo=UTC)}
     )
     with pytest.raises(ValueError, match="timestamp mismatch"):
         align_events([article], [bad_timestamp_record], prices, horizons=[1])

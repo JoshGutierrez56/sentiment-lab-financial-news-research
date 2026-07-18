@@ -12,7 +12,7 @@ import pytest
 from conftest import make_article, make_record
 from sentiment_lab.data.cache import RawResponseCache
 from sentiment_lab.data.storage import ArtifactStore, file_sha256
-from sentiment_lab.nlp.cache import ClassificationCache
+from sentiment_lab.nlp.cache import ClassificationCache, article_content_hash
 
 
 def test_raw_cache_is_content_addressed_and_redacts_token(tmp_path: Path) -> None:
@@ -61,15 +61,35 @@ def test_classification_cache_round_trip_marks_cache_hit(tmp_path: Path) -> None
     loaded = cache.load(record.cache_key)
     assert loaded is not None
     assert loaded.from_cache is True
-    key, input_hash = cache.key(
-        article_content=article.content,
+    input_hash = article_content_hash(article.title, article.content)
+    key = cache.key(
+        article_content_hash=input_hash,
         ticker="aapl.us",
-        company_name="Apple Inc.",
         prompt_version="v1",
         schema_version="s1",
         model="m1",
     )
     assert len(key) == len(input_hash) == 64
+    variants = {
+        cache.key(
+            article_content_hash=content_hash,
+            ticker=ticker,
+            prompt_version=prompt,
+            schema_version=schema,
+            model=model,
+        )
+        for content_hash, ticker, prompt, schema, model in [
+            (input_hash, "AAPL.US", "v1", "s1", "m1"),
+            ("0" * 64, "AAPL.US", "v1", "s1", "m1"),
+            (input_hash, "MSFT.US", "v1", "s1", "m1"),
+            (input_hash, "AAPL.US", "v2", "s1", "m1"),
+            (input_hash, "AAPL.US", "v1", "s2", "m1"),
+            (input_hash, "AAPL.US", "v1", "s1", "m2"),
+        ]
+    }
+    assert len(variants) == 6
+    with pytest.raises(ValueError, match="Refusing to overwrite conflicting"):
+        cache.store(record.model_copy(update={"output_hash": "0" * 64}))
 
 
 def test_classification_cache_detects_output_tampering(tmp_path: Path) -> None:
