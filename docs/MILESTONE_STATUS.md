@@ -61,7 +61,7 @@ article/classification timestamp mismatch rejection.
 Ruff:       PASS
 MyPy:      PASS (23 source files)
 Pytest:    PASS (38 tests)
-Coverage:  PASS (91.68%; gate 85%)
+Coverage:  PASS (91.74%; gate 85%)
 Python:    PASS on 3.11.15 and 3.12.10
 ```
 

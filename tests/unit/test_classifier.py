@@ -26,6 +26,21 @@ class FakeModel:
         return self.outputs.pop(0)
 
 
+class ArticleAwareModel:
+    """Return by authoritative article ID so concurrency cannot reorder fixtures."""
+
+    model = "test-model"
+
+    def __init__(self, outputs: dict[str, object]) -> None:
+        self.outputs = outputs
+
+    def classify(self, messages: list[dict[str, str]]) -> object:
+        prompt = "\n".join(message["content"] for message in messages)
+        matches = [output for article_id, output in self.outputs.items() if article_id in prompt]
+        assert len(matches) == 1
+        return matches[0]
+
+
 def _classifier(tmp_path: Path, model: object) -> ArticleClassifier:
     return ArticleClassifier(
         model,  # type: ignore[arg-type]
@@ -88,7 +103,12 @@ def test_classifier_rejects_persistent_metadata_mismatch(tmp_path: Path) -> None
 def test_classifier_many_preserves_input_order(tmp_path: Path) -> None:
     first = make_article(article_id="1" * 64)
     second = make_article(article_id="2" * 64)
-    model = FakeModel([make_call(first), make_call(second)])
+    model = ArticleAwareModel(
+        {
+            first.article_id: make_call(first),
+            second.article_id: make_call(second),
+        }
+    )
     records = _classifier(tmp_path, model).classify_many(
         [first, second],
         ticker="AAPL.US",
