@@ -60,8 +60,8 @@ article/classification timestamp mismatch rejection.
 ```text
 Ruff:       PASS
 MyPy:      PASS (23 source files)
-Pytest:    PASS (38 tests)
-Coverage:  PASS (91.74%; gate 85%)
+Pytest:    PASS (39 tests)
+Coverage:  PASS (91.83%; gate 85%)
 Python:    PASS on 3.11.15 and 3.12.10
 ```
 
@@ -69,6 +69,9 @@ The mocked integration test runs the full article → structured assessment →
 future return → metrics/report pipeline twice. Articles, assessments, events,
 and metrics have identical hashes; the second manifest records three cache hits
 and zero new model tokens while preserving the original classification ledger.
+An HTTP-level contract test also exercises the installed official OpenAI SDK's
+`responses.parse` implementation and verifies its generated strict schema,
+parsed Pydantic output, returned model/response IDs, and token usage.
 
 ## Security finding and remediation
 

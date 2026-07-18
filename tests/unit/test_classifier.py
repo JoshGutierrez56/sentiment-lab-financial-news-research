@@ -2,10 +2,13 @@
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 from types import SimpleNamespace
 
+import httpx
 import pytest
+from openai import OpenAI
 
 from conftest import make_article, make_call
 from sentiment_lab.config.models import OpenAIConfig
@@ -148,6 +151,89 @@ def test_openai_adapter_uses_responses_parse_and_accounts_cost() -> None:
     assert call.usage.estimated_cost_usd == pytest.approx(0.0009)
     assert parse_calls[0]["text_format"] is call.assessment.__class__
     assert parse_calls[0]["temperature"] == 0
+
+
+def test_official_sdk_parses_mocked_responses_api_http_payload() -> None:
+    """Exercise the installed SDK parser, not only a fake `responses.parse`."""
+
+    article = make_article()
+    assessment = make_call(article).assessment
+    request_bodies: list[dict[str, object]] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        assert request.url.path == "/v1/responses"
+        request_body = json.loads(request.content)
+        request_bodies.append(request_body)
+        return httpx.Response(
+            200,
+            json={
+                "id": "resp_sdk_contract",
+                "object": "response",
+                "created_at": 1_784_395_200,
+                "status": "completed",
+                "model": "sdk-contract-model-2026-07-18",
+                "output": [
+                    {
+                        "id": "msg_sdk_contract",
+                        "type": "message",
+                        "status": "completed",
+                        "role": "assistant",
+                        "content": [
+                            {
+                                "type": "output_text",
+                                "text": assessment.model_dump_json(),
+                                "annotations": [],
+                                "logprobs": [],
+                            }
+                        ],
+                    }
+                ],
+                "parallel_tool_calls": True,
+                "tool_choice": "auto",
+                "tools": [],
+                "usage": {
+                    "input_tokens": 321,
+                    "input_tokens_details": {
+                        "cached_tokens": 0,
+                        "cache_write_tokens": 0,
+                    },
+                    "output_tokens": 77,
+                    "output_tokens_details": {"reasoning_tokens": 0},
+                    "total_tokens": 398,
+                },
+            },
+        )
+
+    http = httpx.Client(transport=httpx.MockTransport(handler))
+    sdk = OpenAI(
+        api_key="sdk-contract-key",
+        base_url="https://openai.test/v1",
+        http_client=http,
+        max_retries=0,
+    )
+    try:
+        client = OpenAIArticleClient(
+            "unused-because-sdk-is-injected",
+            "configured-model",
+            OpenAIConfig(max_retries=1, temperature=0),
+            sdk_client=sdk,
+        )
+        call = client.classify([{"role": "user", "content": "classify"}])
+    finally:
+        sdk.close()
+
+    assert call.assessment == assessment
+    assert call.response_id == "resp_sdk_contract"
+    assert call.response_model == "sdk-contract-model-2026-07-18"
+    assert call.usage.input_tokens == 321
+    assert call.usage.output_tokens == 77
+    text_format = request_bodies[0]["text"]
+    assert isinstance(text_format, dict)
+    schema_format = text_format["format"]
+    assert isinstance(schema_format, dict)
+    assert schema_format["type"] == "json_schema"
+    assert schema_format["strict"] is True
+    assert request_bodies[0]["temperature"] == 0
 
 
 def test_openai_adapter_rejects_empty_parse_and_blank_credentials() -> None:
