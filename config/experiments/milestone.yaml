@@ -1,0 +1,13 @@
+name: eodhd_openai_article_return_milestone
+ticker: AAPL.US
+company_name: Apple Inc.
+news_start: 2026-05-01
+news_end: 2026-06-15
+max_articles: 12
+news_candidate_pool: 500
+max_articles_per_day: 2
+horizons: [1, 3, 5]
+execution_policy: conservative_next_day_open
+neutral_return_bps: 10.0
+random_seed: 1729
+prompt_variant: evidence_v2

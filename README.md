@@ -1,153 +1,180 @@
-# News-Sentiment Algorithmic Trading System
-### FactSet RTNews + DeepSeek Chat | Event-Driven Backtesting
+# Sentiment Lab
 
-[![Python 3.10+](https://img.shields.io/badge/Python-3.10%2B-blue?logo=python)](https://www.python.org/)
-[![License: MIT](https://img.shields.io/badge/License-MIT-green)](LICENSE)
+Sentiment Lab is an evidence-first research pipeline for one deliberately narrow
+question: does ChatGPT's interpretation of an EODHD news article predict the
+specified company's subsequent stock return?
 
----
+The current milestone does exactly this:
 
-## What This Is
+1. Download and preserve EODHD news and adjusted EOD prices.
+2. Select a deterministic, date-diverse sample of full-text articles directly
+   mapped by EODHD to one ticker.
+3. Ask OpenAI for a strict bullish, bearish, or neutral assessment with score,
+   confidence, relevance, event type, horizon, concise reasoning, and an
+   explicit abstention decision.
+4. Cache the validated structured response by the complete classification
+   input, model, prompt version, and schema version.
+5. Enter at the first market open strictly after the article's New York
+   publication date and measure adjusted 1/3/5-trading-day returns.
+6. Write article-level evidence, directional accuracy, and information
+   coefficients to Parquet, JSON, DuckDB views, and a self-contained HTML
+   report.
 
-An algorithmic trading pipeline that ingests news headlines via the FactSet RTNews API, classifies them as bullish/bearish/ambiguous using the DeepSeek Chat LLM, converts the classifications into directional trading signals, and backtests those signals against historical price data.
+Advanced portfolio construction, factors, dashboards, broad universe tooling,
+and parameter sweeps are intentionally deferred until this vertical slice has
+run with real ChatGPT classifications.
 
----
+## Verified status
 
-## Bug Fixes (vs. original)
+As of 2026-07-18:
 
-13 bugs were identified and corrected in the rewrite:
+- A live EODHD sync succeeded for `AAPL.US`: 500 candidate records were cached,
+  then 12 unique full-text articles were selected across 11 publication dates.
+- Article timestamps are stored as timezone-aware UTC Parquet values; price
+  dates are native Parquet dates.
+- The real sample has seven distinct conservative entry dates and complete
+  adjusted 1/3/5-day returns. Every entry is later than publication.
+- Raw and normalized artifacts were scanned for the EODHD credential: zero
+  persisted matches.
+- Ruff and strict MyPy pass. The test suite passes with more than 90% package
+  coverage on both Python 3.11 and 3.12, including mocked HTTP/OpenAI
+  integration and cached-rerun tests.
+- A live OpenAI run has not run because `OPENAI_API_KEY` is absent from the
+  runtime environment. Therefore no trading conclusion is claimed yet.
 
-| # | Bug | Fix |
-|---|-----|-----|
-| 1 | API keys hardcoded in `CONFIG` dict | `load_settings()` reads from env vars only |
-| 2 | Wrong model name `'deepseek-llm'` | Corrected to `'deepseek-chat'` |
-| 3 | `max_drawdown` formula inverted (returned max run-up) | `(nav/peak - 1).min()` — correct negative value |
-| 4 | Sharpe annualised with flat `×252` on non-daily event returns | Annualises by observed signals-per-year from date range |
-| 5 | Cumulative return used `cumsum()` (arithmetic) | Fixed to `(1+r).cumprod()` (geometric) |
-| 6 | `pytest` fixtures in the main production module | Moved entirely to `tests/` |
-| 7 | No retry logic — single `raise_for_status()` | `HTTPAdapter` with exponential backoff on 429/5xx |
-| 8 | Token rate limiter used a simple counter with no rolling window | Sliding-window `deque` of `(timestamp, tokens)` pairs |
-| 9 | `datetime.min` sentinel | `Optional[float] = None` with `time.monotonic()` |
-| 10 | `apply(result_type='expand')` with no guaranteed 2-tuple contract | Explicit return type in all error paths |
-| 11 | Chained `.loc` on MultiIndex — silent `KeyError` risk | `pd.IndexSlice` + proper `try/except` |
-| 12 | Entire system in one flat file | Proper package structure with isolated modules |
-| 13 | `CONFIG` dict with placeholder secrets at module scope | Eliminated — secrets only ever touch memory at runtime |
+## Install
 
----
+Python 3.11 or newer and [uv](https://docs.astral.sh/uv/) are recommended.
 
-## Architecture
-
-```
-news-sentiment-trader/
-│
-├── run.py                           ← Pipeline entry point (CLI)
-├── .env.example                     ← Credential template (never commit .env)
-│
-├── src/trader/
-│   ├── config.py                    ← Settings loaded from env vars
-│   ├── data/
-│   │   └── factset.py               ← FactSet RTNews client (retry, rate limit)
-│   ├── nlp/
-│   │   └── sentiment.py             ← DeepSeek Chat analyser (sliding-window RL)
-│   ├── strategy/
-│   │   └── signals.py               ← Sentiment → LONG / SHORT / HOLD
-│   └── backtest/
-│       └── engine.py                ← Event-driven backtester + metrics
-│
-└── tests/
-    ├── test_strategy.py             ← Signal generation (no API calls)
-    ├── test_backtest.py             ← Metric correctness (MDD, Sharpe, total return)
-    └── test_sentiment.py            ← Sentiment analyser (fully mocked)
+```powershell
+git clone https://github.com/JoshGutierrez56/DeepSeek-Generative-AI-Sentiment-Analysis-Algorithm.git
+cd DeepSeek-Generative-AI-Sentiment-Analysis-Algorithm
+git switch agent/openai-eodhd-rebuild
+uv sync --extra dev
+Copy-Item .env.example .env
 ```
 
----
+Populate the untracked `.env` file:
 
-## Setup
-
-### 1. Install
-
-```bash
-git clone https://github.com/YOUR_USERNAME/news-sentiment-trader.git
-cd news-sentiment-trader
-pip install -e ".[dev]"
+```dotenv
+EODHD_API_TOKEN=...
+OPENAI_API_KEY=...
+OPENAI_MODEL=...
+DATA_ROOT=./data
+DUCKDB_PATH=./data/research.duckdb
+LOG_LEVEL=INFO
 ```
 
-### 2. Configure credentials
+`OPENAI_MODEL` is intentionally not hardcoded. Select a currently supported
+model that supports Structured Outputs in the Responses API. Credentials are
+loaded only at runtime. Do not commit `.env`.
 
-```bash
-cp .env.example .env
-# Edit .env and fill in FACTSET_API_KEY and DEEPSEEK_API_KEY
-export $(cat .env | xargs)
+## Run the core milestone
+
+Download fresh EODHD data and preserve each raw response before normalization:
+
+```powershell
+uv run sentiment-lab data sync --config config/experiments/milestone.yaml --refresh
 ```
 
-### 3. Run
+Run the complete real article-to-return pipeline:
 
-```bash
-python run.py \
-    --tickers AAPL MSFT GOOGL \
-    --start   2022-01-01 \
-    --end     2022-12-31 \
-    --prices  data/prices.csv \
-    --term    short
+```powershell
+uv run sentiment-lab milestone run --config config/experiments/milestone.yaml
 ```
 
-**Expected output:**
+Do not add `--refresh` or `--force-classify` on a reproducibility rerun. The
+command will then use the raw EODHD cache and content-addressed OpenAI cache.
+
+Each completed run creates `data/results/<experiment-id>/` containing:
+
+- `articles.parquet` — provider text, original publication time, retrieval time,
+  symbols, provider sentiment, and raw-response hash.
+- `assessments.parquet` — ChatGPT label, score, confidence, relevance, concise
+  reasoning, abstention, model/prompt/schema versions, token usage, and cost.
+- `events.parquet` — the joined article/assessment plus entry timestamp and
+  future adjusted returns.
+- `metrics.json` — coverage, directional accuracy, Spearman IC, Pearson
+  correlation, confidence-weighted IC, and per-label returns.
+- `manifest.json` — git/config/data hashes, exact versions and parameters,
+  artifact hashes, token totals, and summary metrics.
+- `report.html` — a compact human-readable evidence table and metrics report.
+
+The latest normalized tables are also exposed in `data/research.duckdb` as
+`milestone_articles_latest`, `milestone_prices_latest`,
+`milestone_assessments_latest`, and `milestone_events_latest`.
+
+## Validate the implementation
+
+```powershell
+uv run ruff format --check .
+uv run ruff check .
+uv run mypy src/sentiment_lab
+uv run pytest
 ```
-==================================================
-  BACKTEST RESULTS
-==================================================
-  sharpe_ratio          : 0.8234
-  max_drawdown          : -0.0412        ← always ≤ 0
-  total_return          : 0.1847
-  hit_rate              : 0.5800
-  n_trades              : 142
-  avg_trade_return      : 0.001302
-==================================================
+
+Or run all checks with:
+
+```powershell
+make check
 ```
 
-### 4. Test
+Tests never require paid credentials. They cover strict config rejection,
+EODHD pagination/retry/rate-limit/schema behavior, immutable raw caching, token
+redaction, OpenAI structured parsing and semantic repair, concurrent cache
+safety, after-hours/weekend alignment, adjusted-open math, accuracy/IC metrics,
+DuckDB views, reports, and deterministic event artifacts.
 
-```bash
-pytest tests/ -v
-```
+## Timing and return definition
 
-All tests run without API keys — the sentiment analyser is fully mocked.
+The active policy is `conservative_next_day_open`:
 
----
+- Convert the provider timestamp from UTC to `America/New_York`.
+- Ignore every price on that local publication date, even for pre-market news.
+- Enter at 09:30 New York time on the first later EODHD trading date.
+- Estimate adjusted open as `raw_open × adjusted_close / raw_close` for that
+  session so entry and exit values use a consistent split-adjusted scale.
+- A 1-day horizon exits at that entry session's adjusted close; 3-day and 5-day
+  horizons exit at the third and fifth trading-session adjusted closes.
 
-## Price Data Format
+The engine rejects article/classification identity or timestamp mismatches and
+tests explicitly prove that no entry precedes its article.
 
-`data/prices.csv` must contain:
+## Interpretation of the milestone metrics
 
-| Column | Type | Description |
-|--------|------|-------------|
-| `date`   | YYYY-MM-DD | Trading date |
-| `ticker` | str | Ticker symbol matching FactSet feed |
-| `return` | float | One-day simple return (e.g. `0.0123` = +1.23%) |
+Directional accuracy maps realized returns within ±10 bps to neutral and uses
+their sign outside that band. IC is the Spearman correlation between ChatGPT's
+continuous sentiment score and the future return. Non-tradable/abstained rows
+remain in the evidence artifact but are excluded from accuracy and IC.
 
----
+These are descriptive smoke-test metrics. A 12-article sample is not evidence of
+statistical significance; overlapping returns violate IID assumptions, and the
+ordinary correlation p-values in the compact report do not correct dependence.
+HAC inference, block bootstrap, controls, placebos, costs, and untouched
+out-of-sample validation remain gated behind successful completion of this core
+pipeline.
 
-## Key Design Decisions
+## Current limitations
 
-**Rate limiting** — FactSet uses token-bucket limiting (`time.monotonic()` based, 100 ms floor). DeepSeek uses a **sliding-window deque** that tracks actual token consumption over the past 60 seconds — not a simple counter that forgets history.
+- The live sample covers one ticker and is selected from EODHD's most recent 500
+  candidate rows in the configured interval, with at most two articles per New
+  York publication date.
+- Mapping currently requires the exact requested ticker in EODHD's article
+  symbols. Ambiguous entity resolution abstention is a later milestone.
+- Provider timestamps are treated as first availability; article revision
+  history is unavailable in this endpoint and cannot yet be controlled.
+- EOD data cannot represent intraday reaction. The deliberately conservative
+  next-day-open rule avoids pretending otherwise.
+- Returns are raw company returns, not market- or factor-adjusted abnormal
+  returns.
+- No human-labeled sentiment evaluation has been performed.
+- Most importantly, the real ChatGPT classifications and resulting accuracy/IC
+  report remain blocked until an OpenAI key and model are supplied.
 
-**Retry** — Both API clients share a `requests.Session` mounted with `HTTPAdapter(max_retries=Retry(total=3, backoff_factor=0.5, status_forcelist=[429,500,502,503,504]))`. Transient 5xx errors and rate-limit 429s are retried automatically with exponential backoff.
-
-**Metrics** — All three performance metrics use geometrically compounded returns `(1+r).cumprod()`. Sharpe ratio is annualised by the *observed* signal frequency (signals per year in the backtest window), not the hardcoded 252-day constant.
-
-**Secrets** — No credentials ever appear in source code. `load_settings()` calls `os.environ.get()` at runtime; the `Settings` dataclass is frozen and passed as a dependency to every client. `CONFIG` dict is gone entirely.
-
----
-
-## Extending the System
-
-**Swap the LLM** — Replace `DeepSeekAnalyzer` with any chat-completion API (OpenAI, Claude, Gemini) by subclassing and overriding `analyze_sentiment()`. The rest of the pipeline is unchanged.
-
-**Add more signals** — `TradingStrategy.generate_signals()` currently maps one headline → one signal. You can aggregate multiple headlines per stock per day before calling `generate_signals()` to reduce noise.
-
-**Position sizing** — The backtester currently assumes unit position size. Add a `position_size` column to signals (e.g. Kelly criterion or vol-targeting) and multiply `trade_return × position_size` in `run_backtest()`.
-
----
+See [repository audit](docs/REPOSITORY_AUDIT.md) and
+[implementation plan](docs/IMPLEMENTATION_PLAN.md) for provenance, reuse, and
+the gated roadmap.
 
 ## License
 
-MIT
+MIT. See [LICENSE](LICENSE).

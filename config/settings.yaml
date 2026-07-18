@@ -1,0 +1,19 @@
+eodhd:
+  base_url: https://eodhd.com
+  timeout_seconds: 30.0
+  max_retries: 4
+  backoff_base_seconds: 0.5
+  backoff_max_seconds: 20.0
+  jitter_seconds: 0.25
+  news_page_size: 100
+openai:
+  timeout_seconds: 60.0
+  max_retries: 3
+  max_concurrency: 3
+  temperature: 0.0
+  max_output_tokens: 700
+  input_cost_per_million: null
+  output_cost_per_million: null
+storage:
+  data_root: ./data
+  duckdb_path: ./data/research.duckdb

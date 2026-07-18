@@ -1,0 +1,5 @@
+prompt_variant: evidence_v2
+schema_version: article_assessment.v1
+max_article_characters: 16000
+minimum_confidence: 0.0
+minimum_relevance: 0.0

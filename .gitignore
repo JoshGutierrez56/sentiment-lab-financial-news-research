@@ -1,5 +1,7 @@
 # Secrets — never commit these
 .env
+.env.*
+!.env.example
 *.key
 *_credentials*
 
@@ -10,15 +12,28 @@ __pycache__/
 dist/
 build/
 .eggs/
+.venv*/
 
 # Testing / coverage
 .pytest_cache/
 .coverage
 htmlcov/
+.mypy_cache/
+.ruff_cache/
 
-# Data (large files)
-data/*.csv
-data/*.parquet
+# Generated data and research artifacts
+data/raw/**
+data/normalized/**
+data/features/**
+data/results/**
+data/*.duckdb*
+!data/raw/.gitkeep
+!data/normalized/.gitkeep
+!data/features/.gitkeep
+!data/results/.gitkeep
+reports/**
+!reports/.gitkeep
+graphify-out/
 
 # IDE
 .vscode/
