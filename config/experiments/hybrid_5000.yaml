@@ -40,7 +40,7 @@ universe:
   - {ticker: NFLX.US, company_name: Netflix Inc., sector: Communication Services, aliases: [Netflix]}
   - {ticker: DIS.US, company_name: The Walt Disney Company, sector: Communication Services, aliases: [Disney, Walt Disney]}
   - {ticker: CMCSA.US, company_name: Comcast Corporation, sector: Communication Services, aliases: [Comcast]}
-  - {ticker: T.US, company_name: AT&T Inc., sector: Communication Services, aliases: [AT&T]}
+  - {ticker: WBD.US, company_name: Warner Bros. Discovery Inc., sector: Communication Services, aliases: [Warner Bros. Discovery, Warner Bros Discovery, WBD]}
   - {ticker: VZ.US, company_name: Verizon Communications Inc., sector: Communication Services, aliases: [Verizon]}
   - {ticker: TMUS.US, company_name: T-Mobile US Inc., sector: Communication Services, aliases: [T-Mobile, T Mobile]}
   - {ticker: CHTR.US, company_name: Charter Communications Inc., sector: Communication Services, aliases: [Charter Communications, Spectrum]}
@@ -82,11 +82,11 @@ universe:
   - {ticker: V.US, company_name: Visa Inc., sector: Financials, aliases: [Visa]}
   - {ticker: MA.US, company_name: Mastercard Incorporated, sector: Financials, aliases: [Mastercard, MasterCard]}
   - {ticker: PGR.US, company_name: The Progressive Corporation, sector: Financials, aliases: [Progressive Insurance, Progressive]}
-  - {ticker: SPGI.US, company_name: S&P Global Inc., sector: Financials, aliases: [S&P Global, S and P Global]}
+  - {ticker: ICE.US, company_name: Intercontinental Exchange Inc., sector: Financials, aliases: [Intercontinental Exchange, ICE]}
   - {ticker: CME.US, company_name: CME Group Inc., sector: Financials, aliases: [CME Group]}
   - {ticker: COF.US, company_name: Capital One Financial Corporation, sector: Financials, aliases: [Capital One]}
   # Health Care (15)
-  - {ticker: JNJ.US, company_name: Johnson & Johnson, sector: Health Care, aliases: [Johnson & Johnson, J&J]}
+  - {ticker: MDT.US, company_name: Medtronic plc, sector: Health Care, aliases: [Medtronic]}
   - {ticker: LLY.US, company_name: Eli Lilly and Company, sector: Health Care, aliases: [Eli Lilly, Lilly]}
   - {ticker: UNH.US, company_name: UnitedHealth Group Incorporated, sector: Health Care, aliases: [UnitedHealth, UnitedHealthcare]}
   - {ticker: ABBV.US, company_name: AbbVie Inc., sector: Health Care, aliases: [AbbVie]}
