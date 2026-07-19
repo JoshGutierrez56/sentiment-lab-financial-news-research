@@ -219,6 +219,49 @@ def freeze_primary_specification(
     if not eligible_candidates:
         raise RuntimeError("No development/validation specification passed coverage gates")
     selected = max(eligible_candidates, key=lambda value: float(value["utility"]))
+    confidence_index = {
+        value: index for index, value in enumerate(config.confidence_thresholds)
+    }
+    relevance_index = {
+        value: index for index, value in enumerate(config.relevance_thresholds)
+    }
+    materiality_index = {
+        value: index for index, value in enumerate(config.materiality_thresholds)
+    }
+    neighbors = [
+        candidate
+        for candidate in eligible_candidates
+        if candidate is not selected
+        and candidate["signal"] == selected["signal"]
+        and candidate["aggregation"] == selected["aggregation"]
+        and (
+            abs(
+                confidence_index[float(candidate["minimum_confidence"])]
+                - confidence_index[float(selected["minimum_confidence"])]
+            )
+            + abs(
+                relevance_index[float(candidate["minimum_relevance"])]
+                - relevance_index[float(selected["minimum_relevance"])]
+            )
+            + abs(
+                materiality_index[float(candidate["minimum_materiality"])]
+                - materiality_index[float(selected["minimum_materiality"])]
+            )
+        )
+        == 1
+    ]
+    nearby_positive = sum(
+        all(
+            float(candidate["metrics"]["validation"][f"{horizon}d"]["spearman_ic"] or 0.0)
+            > 0
+            for horizon in (5, 21)
+        )
+        for candidate in neighbors
+    )
+    selected["nearby_candidate_count"] = len(neighbors)
+    selected["nearby_positive_fraction"] = (
+        nearby_positive / len(neighbors) if neighbors else 0.0
+    )
     selected_aggregation = str(selected["aggregation"])
     portfolio_aggregation = (
         selected_aggregation

@@ -55,6 +55,7 @@ def research_decision(
     portfolio_5d: dict[str, Any],
     portfolio_21d: dict[str, Any],
     tradable_coverage: float,
+    nearby_positive_fraction: float,
 ) -> tuple[Conclusion, ScaleRecommendation, dict[str, bool]]:
     """Apply fixed scale gates; no event-level Sharpe enters this decision."""
 
@@ -80,6 +81,18 @@ def research_decision(
         for item in (portfolio_5d, portfolio_21d)
     )
     coverage_ok = tradable_coverage >= 0.25
+    dependence_adjusted = all(
+        float(item.get("company_cluster_bootstrap_95_ci", {}).get("lower_95") or 0.0) > 0
+        and float(
+            item.get("date_block_bootstrap_95_ci", {})
+            .get("signed_return", {})
+            .get("lower_95")
+            or 0.0
+        )
+        > 0
+        for item in (holdout_5d, holdout_21d)
+    )
+    nearby_stability = nearby_positive_fraction >= 0.60
     concentration_ok = all(
         float(item.get("maximum_exposure_hhi") or 1.0) <= 0.25
         for item in (portfolio_5d, portfolio_21d)
@@ -89,6 +102,8 @@ def research_decision(
         "incremental_to_keyword_event_type_and_eodhd": baseline_incremental,
         "positive_under_conservative_costs": cost_survival,
         "tradable_coverage_at_least_25_percent": coverage_ok,
+        "dependence_adjusted_intervals_positive": dependence_adjusted,
+        "nearby_specifications_directionally_stable": nearby_stability,
         "portfolio_not_extremely_concentrated": concentration_ok,
     }
     if all(gates.values()):
@@ -167,6 +182,7 @@ def build_final_report(
         portfolio_5d=portfolio["5d"][portfolio_mode],
         portfolio_21d=portfolio["21d"][portfolio_mode],
         tradable_coverage=float(evidence["prediction"]["counts"]["tradable_coverage"]),
+        nearby_positive_fraction=float(specification["nearby_positive_fraction"]),
     )
     conclusion, recommendation, gates = decision
     additional_cost = float(evidence["additional_openai"]["actual_openai_cost_usd"])
