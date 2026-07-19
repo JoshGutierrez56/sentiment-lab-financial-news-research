@@ -1,12 +1,9 @@
 # Sentiment Lab
 
-Sentiment Lab currently answers one deliberately narrow question: does a
-structured OpenAI assessment of an EODHD article predict the specified
-company's subsequent stock return?
-
-Advanced portfolios, factors, dashboards, and large experiment frameworks are
-deferred until this article-to-return milestone has run successfully with real
-OpenAI classifications.
+Sentiment Lab is a reproducible EODHD equity-news research platform. It tests
+whether structured OpenAI or local-model interpretation predicts the specified
+company's subsequent return, then evaluates a simple daily portfolio only after
+event-level predictive tests are complete.
 
 ## Core execution path
 
@@ -57,27 +54,28 @@ The implementation follows the official [Batch API guide](https://developers.ope
 [prompt-caching guide](https://developers.openai.com/api/docs/guides/prompt-caching),
 and [pricing page](https://developers.openai.com/api/docs/pricing).
 
-## Verified status
+## Verified milestones
 
-As of 2026-07-18, the cached EODHD smoke selection ran successfully:
+The 12-article operational smoke test and immutable 250-article OpenAI validation
+are complete. Experiment `20260718T232828Z_70aaf344` contains 250 valid
+classifications, 114 tradable events, a 54.4% abstention rate, and $0.348443 of
+OpenAI cost. It showed positive but still inconclusive 5- and 21-day evidence.
+Its artifacts are preserved unchanged as OpenAI calibration dataset v1.
 
-- 500 `AAPL.US` articles considered; 488 filtered before OpenAI.
-- Pre-request exclusions: 33 inadequate-text records, 33 broad market
-  summaries, four duplicate stories, and 418 records beyond the 12-item sample
-  cap. No ticker-mapping or date-window failures occurred.
-- 12 full-text articles selected across 11 UTC publication dates; no
-  headline-only records selected.
-- 48 adjusted price rows; all 12 events have conservative entries and available
-  adjusted 1/3/5-day returns, with every entry strictly after publication.
-- Conservative no-submit cost ceiling: $0.044043 for the mini batch and
-  $0.146733 more if all 12 articles escalate, or $0.190775 combined against the
-  $1 smoke limit.
-- Ruff, strict MyPy, and 41 tests pass; package coverage is 90.16% against an
-  85% gate.
+The next sample was frozen before local inference:
 
-`OPENAI_API_KEY` is not configured in the current local runtime. Consequently,
-no paid batch was submitted and no real sentiment, accuracy, or IC result is
-claimed. The research conclusion remains **INCONCLUSIVE**.
+- sample hash `7b07079fb2bcbf7546e1dd810ee081ddb86adb7bb37aa0979efac31fe30553a7`;
+- 5,000 unique full-text articles and syndicated-story clusters;
+- 125 companies at 40 articles each across 11 sectors and five years;
+- 1,788 deterministic earnings/guidance candidates;
+- complete adjusted 1/3/5/10/21/63-session returns; and
+- zero entry-before-publication violations.
+
+The selected local model is `qwen3.6:35b-a3b` Q4_K_M. The exact 60/20/20
+chronological split and all stop gates are locked. See
+[the hybrid methodology](docs/HYBRID_5000_METHODOLOGY.md). The final 5,000-row
+research conclusion is not stated until the local run, additional calibration,
+untouched holdout, baselines, and daily portfolios finish.
 
 ## Install
 
@@ -122,6 +120,27 @@ Do not add `--refresh` to a reproducibility rerun. EODHD and permanent OpenAI
 caches are reused automatically; there is intentionally no force-reclassify
 option.
 
+## Run the locked hybrid study
+
+The hybrid commands consume strict, hash-locked YAML. A completed local cache is
+always resumed; there is no force-reclassify switch.
+
+```powershell
+uv run sentiment-lab hybrid sample-sync --config config/experiments/hybrid_5000.yaml
+uv run sentiment-lab hybrid local-run --config config/experiments/hybrid_local_5000.yaml
+uv run sentiment-lab hybrid prediction-run --config config/experiments/hybrid_prediction_devval.yaml
+uv run sentiment-lab hybrid spec-freeze --config config/experiments/hybrid_specification.yaml
+uv run sentiment-lab hybrid calibration-select --config config/experiments/hybrid_calibration_select.yaml
+uv run sentiment-lab hybrid calibration-run --config config/experiments/hybrid_calibration_run.yaml
+uv run sentiment-lab hybrid prediction-run --config config/experiments/hybrid_prediction_holdout.yaml
+uv run sentiment-lab hybrid baselines-run --config config/experiments/hybrid_baselines_holdout.yaml
+uv run sentiment-lab hybrid portfolio-run --config config/experiments/hybrid_portfolio_holdout.yaml
+```
+
+The downstream YAML files are materialized only after their input artifact
+hashes exist. Holdout commands fail closed until the primary specification is
+frozen.
+
 Each completed result directory contains:
 
 - `articles.parquet` — provider text, timestamps, symbols, provider sentiment,
@@ -161,9 +180,11 @@ Directional accuracy maps returns within +/-10 bps to neutral. IC is Spearman
 correlation between the continuous score and future return. Abstained rows stay
 in evidence artifacts but are excluded from accuracy and IC.
 
-A 12-article, one-ticker smoke sample cannot establish significance. HAC/block
-bootstrap inference, baselines, costs, walk-forward validation, and an untouched
-test remain gated behind successful real classification of this vertical slice.
+A 12-article, one-ticker smoke sample cannot establish significance. The hybrid
+study uses company/date clustering, block bootstrap, simple baselines, explicit
+costs, and an untouched chronological holdout. Event-level returns are never
+reported with a Sharpe ratio; Sharpe is reserved for explicit daily portfolio
+series.
 See [milestone status](docs/MILESTONE_STATUS.md), [repository audit](docs/REPOSITORY_AUDIT.md),
 and [implementation plan](docs/IMPLEMENTATION_PLAN.md).
 
