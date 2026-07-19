@@ -39,6 +39,7 @@ class HybridSampleConfig(BaseModel):
     universe: list[ValidationUniverseMember] = Field(min_length=100)
     articles_per_company: int = Field(default=40, ge=1, le=100)
     articles_per_company_year: int = Field(default=8, ge=1, le=25)
+    minimum_articles_per_company_year: int = Field(default=5, ge=1, le=25)
     candidates_per_quarter: int = Field(default=60, ge=10, le=250)
     max_articles: int = Field(default=5000, ge=1, le=5000)
     minimum_relevance_score: float = Field(default=0.55, ge=0.0, le=1.0)
@@ -67,6 +68,8 @@ class HybridSampleConfig(BaseModel):
         years = self.news_end.year - self.news_start.year + 1
         if self.articles_per_company != self.articles_per_company_year * years:
             raise ValueError("Per-company total must equal per-year total times year count")
+        if self.minimum_articles_per_company_year > self.articles_per_company_year:
+            raise ValueError("Minimum per-year coverage cannot exceed the target")
         if len(self.universe) * self.articles_per_company != self.max_articles:
             raise ValueError("Universe size times per-company total must equal max_articles")
         if len({item.ticker for item in self.universe}) != len(self.universe):
@@ -195,6 +198,38 @@ def _select_year(
         event_counts[chosen.primary_event_type] += 1
         quarter_counts[(chosen.article.provider_timestamp.month - 1) // 3] += 1
     return sorted(selected, key=lambda item: (item.article.provider_timestamp, item.article.article_id))
+
+
+def _select_company_backfill(
+    candidates: list[ScoredCandidate],
+    selected: list[ScoredCandidate],
+    *,
+    count: int,
+    seed: int,
+) -> list[ScoredCandidate]:
+    """Fill source shortfalls while favoring underrepresented years and event types."""
+
+    selected_ids = {item.article.article_id for item in selected}
+    year_counts: Counter[int] = Counter(item.article.provider_timestamp.year for item in selected)
+    event_counts: Counter[HybridEventType] = Counter(item.primary_event_type for item in selected)
+    available = [item for item in candidates if item.article.article_id not in selected_ids]
+    output: list[ScoredCandidate] = []
+    while available and len(output) < count:
+        ranked = sorted(
+            available,
+            key=lambda item: (
+                year_counts[item.article.provider_timestamp.year],
+                item.primary_event_type is HybridEventType.other,
+                event_counts[item.primary_event_type],
+                *_candidate_sort_key(item, seed),
+            ),
+        )
+        chosen = ranked[0]
+        output.append(chosen)
+        available.remove(chosen)
+        year_counts[chosen.article.provider_timestamp.year] += 1
+        event_counts[chosen.primary_event_type] += 1
+    return output
 
 
 def _aligned_rows(
@@ -374,16 +409,32 @@ def sync_hybrid_sample(
         for year in years:
             yearly = _select_year(
                 by_ticker_year[(member.ticker, year)],
-                count=config.articles_per_company_year,
+                count=min(
+                    config.articles_per_company_year,
+                    len(by_ticker_year[(member.ticker, year)]),
+                ),
                 earnings_guidance_target=config.earnings_guidance_per_company_year,
                 seed=config.random_seed + member_index * 100 + year,
             )
-            if len(yearly) != config.articles_per_company_year:
+            if len(yearly) < config.minimum_articles_per_company_year:
                 raise RuntimeError(
                     f"{member.ticker} year {year} has {len(yearly)} eligible primary stories; "
-                    f"{config.articles_per_company_year} required"
+                    f"minimum {config.minimum_articles_per_company_year} required"
                 )
             company_selected.extend(yearly)
+        shortfall = config.articles_per_company - len(company_selected)
+        if shortfall > 0:
+            company_pool = [
+                item for item in clustered if item.member.ticker == member.ticker
+            ]
+            company_selected.extend(
+                _select_company_backfill(
+                    company_pool,
+                    company_selected,
+                    count=shortfall,
+                    seed=config.random_seed + member_index,
+                )
+            )
         if len(company_selected) != config.articles_per_company:
             raise RuntimeError(f"{member.ticker} did not produce its frozen allocation")
         selected.extend(company_selected)
@@ -455,6 +506,15 @@ def sync_hybrid_sample(
         )
         / len(selected),
         "event_type_candidates": {key.value: value for key, value in event_counts.items()},
+        "ticker_year_counts": {
+            f"{ticker}:{year}": count
+            for (ticker, year), count in sorted(
+                Counter(
+                    (item.member.ticker, item.article.provider_timestamp.year)
+                    for item in selected
+                ).items()
+            )
+        },
         "earnings_guidance_count": earnings_guidance,
         "other_fraction": other_fraction,
         "candidate_filtering": dict(totals),
