@@ -30,6 +30,10 @@ from sentiment_lab.experiments.runner import MilestoneRunner, sync_milestone_dat
 from sentiment_lab.experiments.validation import ValidationRunner, sync_validation_data
 from sentiment_lab.hybrid.analysis import PredictionAnalysisConfig, run_prediction_analysis
 from sentiment_lab.hybrid.baselines import BaselineConfig, run_baselines
+from sentiment_lab.hybrid.calibration_analysis import (
+    CalibrationAnalysisConfig,
+    run_calibration_analysis,
+)
 from sentiment_lab.hybrid.classification import HybridLocalRunConfig, run_local_classification
 from sentiment_lab.hybrid.final_report import FinalReportConfig, build_final_report
 from sentiment_lab.hybrid.openai_calibration import (
@@ -451,6 +455,26 @@ def hybrid_baselines_run(
     try:
         output = run_baselines(
             _yaml_config(config, BaselineConfig),
+            data_root=app_config.storage.data_root,
+            duckdb_path=app_config.storage.duckdb_path,
+        )
+    except (RuntimeError, ValueError) as exc:
+        _fail(str(exc))
+    typer.echo(str(output))
+
+
+@hybrid_app.command("calibration-analyze")
+def hybrid_calibration_analyze(
+    config: Annotated[Path, typer.Option(exists=True, readable=True)],
+    settings: Annotated[Path, typer.Option(exists=True)] = Path("config/settings.yaml"),
+) -> None:
+    """Compare local and additional OpenAI outputs without holdout access."""
+
+    runtime = RuntimeSecrets()
+    app_config = load_app_config(settings, secrets=runtime)
+    try:
+        output = run_calibration_analysis(
+            _yaml_config(config, CalibrationAnalysisConfig),
             data_root=app_config.storage.data_root,
             duckdb_path=app_config.storage.duckdb_path,
         )

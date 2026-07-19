@@ -132,9 +132,11 @@ uv run sentiment-lab hybrid prediction-run --config config/experiments/hybrid_pr
 uv run sentiment-lab hybrid spec-freeze --config config/experiments/hybrid_specification.yaml
 uv run sentiment-lab hybrid calibration-select --config config/experiments/hybrid_calibration_select.yaml
 uv run sentiment-lab hybrid calibration-run --config config/experiments/hybrid_calibration_run.yaml
+uv run sentiment-lab hybrid calibration-analyze --config config/experiments/hybrid_calibration_analysis.yaml
 uv run sentiment-lab hybrid prediction-run --config config/experiments/hybrid_prediction_holdout.yaml
 uv run sentiment-lab hybrid baselines-run --config config/experiments/hybrid_baselines_holdout.yaml
 uv run sentiment-lab hybrid portfolio-run --config config/experiments/hybrid_portfolio_holdout.yaml
+uv run sentiment-lab hybrid report-build --config config/experiments/hybrid_final_report.yaml
 ```
 
 The downstream YAML files are materialized only after their input artifact

@@ -104,4 +104,7 @@ marked series.
   checked against OpenAI calibration and returns.
 - Local-model electricity cost uses sampled GPU power and a configured $0.25/kWh rate; it excludes
   embodied hardware and host-system power.
+- If local inference is interrupted, the final cost ledger combines sampled telemetry from the
+  resumed segment with a separately disclosed estimate for the interrupted segment. That estimate
+  is observed model duration multiplied by the benchmark model's average GPU power.
 - Transaction costs are scenario assumptions, not reconstructed historical order-book costs.

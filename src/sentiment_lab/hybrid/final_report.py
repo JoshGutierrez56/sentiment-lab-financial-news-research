@@ -27,8 +27,12 @@ class FinalReportConfig(BaseModel):
     baseline_metrics: Path
     portfolio_metrics: Path
     additional_openai_manifest: Path
+    calibration_metrics: Path
     expected_hashes: dict[str, str]
     original_openai_cost_usd: float = Field(default=0.348443, ge=0.0)
+    prior_local_runtime_seconds: float = Field(default=0.0, ge=0.0)
+    prior_local_energy_kwh_estimate: float = Field(default=0.0, ge=0.0)
+    electricity_rate_usd_per_kwh: float = Field(default=0.25, ge=0.0)
 
 
 @dataclass(frozen=True)
@@ -162,6 +166,7 @@ def build_final_report(
         "baselines": config.baseline_metrics,
         "portfolio": config.portfolio_metrics,
         "additional_openai": config.additional_openai_manifest,
+        "calibration": config.calibration_metrics,
     }
     for name, path in paths.items():
         if file_sha256(path) != config.expected_hashes.get(name):
@@ -187,6 +192,9 @@ def build_final_report(
     conclusion, recommendation, gates = decision
     additional_cost = float(evidence["additional_openai"]["actual_openai_cost_usd"])
     local_gpu = evidence["local"]["gpu"]
+    local_energy = float(local_gpu["energy_kwh"]) + config.prior_local_energy_kwh_estimate
+    local_electricity_cost = local_energy * config.electricity_rate_usd_per_kwh
+    local_runtime = float(evidence["local"]["elapsed_seconds"]) + config.prior_local_runtime_seconds
     results = {
         "conclusion": conclusion,
         "scale_recommendation": recommendation,
@@ -204,19 +212,35 @@ def build_final_report(
             )
         },
         "local_run": evidence["local"],
+        "local_runtime_accounting": {
+            "total_runtime_seconds": local_runtime,
+            "prior_interrupted_segment_seconds": config.prior_local_runtime_seconds,
+            "prior_interrupted_segment_energy_kwh_estimate": (
+                config.prior_local_energy_kwh_estimate
+            ),
+            "method": (
+                "The interrupted segment uses observed model duration multiplied by the "
+                "benchmark average GPU power; the resumed segment uses sampled telemetry."
+            ),
+        },
         "selected_specification": specification,
         "holdout_prediction": {"5d": prediction["5d"], "21d": prediction["21d"]},
         "holdout_baselines": {"5d": baseline["5d"], "21d": baseline["21d"]},
         "holdout_portfolio": portfolio,
+        "all_prediction_evidence": evidence["prediction"],
+        "all_baseline_evidence": evidence["baselines"],
+        "all_portfolio_evidence": evidence["portfolio"],
+        "original_250_local_benchmark": evidence["benchmark"],
+        "additional_openai_calibration": evidence["calibration"],
         "costs": {
             "additional_openai_usd": additional_cost,
             "cumulative_openai_usd": config.original_openai_cost_usd + additional_cost,
-            "local_electricity_kwh": local_gpu["energy_kwh"],
-            "local_electricity_usd": local_gpu["electricity_cost_usd"],
+            "local_electricity_kwh": local_energy,
+            "local_electricity_usd": local_electricity_cost,
             "total_hybrid_usd": (
                 config.original_openai_cost_usd
                 + additional_cost
-                + float(local_gpu["electricity_cost_usd"])
+                + local_electricity_cost
             ),
         },
         "evidence_hashes": config.expected_hashes,
@@ -225,6 +249,7 @@ def build_final_report(
             "The fixed 125-company universe can retain survivorship bias.",
             "Daily adjusted prices cannot reconstruct intraday reaction paths or quoted spreads.",
             "Transaction costs are scenarios rather than historical order-book reconstruction.",
+            "The interrupted local-inference segment has estimated rather than sampled energy.",
         ],
     }
     root = data_root / "results" / "hybrid_5000_final"
