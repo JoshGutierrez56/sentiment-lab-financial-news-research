@@ -48,6 +48,7 @@ from sentiment_lab.hybrid.specification import (
     SpecificationSearchConfig,
     freeze_primary_specification,
 )
+from sentiment_lab.hybrid.splits import freeze_chronological_splits
 from sentiment_lab.nlp.cache import ClassificationCache
 from sentiment_lab.nlp.classifier import ArticleClassifier
 from sentiment_lab.nlp.openai_client import OpenAIBatchClient, OpenAIClassificationError
@@ -353,6 +354,35 @@ def hybrid_local_run(
     try:
         output = run_local_classification(
             _yaml_config(config, HybridLocalRunConfig),
+            data_root=app_config.storage.data_root,
+            duckdb_path=app_config.storage.duckdb_path,
+        )
+    except (RuntimeError, ValueError) as exc:
+        _fail(str(exc))
+    typer.echo(str(output))
+
+
+@hybrid_app.command("splits-freeze")
+def hybrid_splits_freeze(
+    articles: Annotated[Path, typer.Option(exists=True, readable=True)],
+    sample_hash: Annotated[str, typer.Option()],
+    output_root: Annotated[Path, typer.Option()],
+    settings: Annotated[Path, typer.Option(exists=True)] = Path("config/settings.yaml"),
+) -> None:
+    """Freeze exact chronological 60/20/20 assignments before analysis."""
+
+    invalid_digest = len(sample_hash) != 64 or any(
+        character not in "0123456789abcdef" for character in sample_hash
+    )
+    if invalid_digest:
+        _fail("sample-hash must be a lowercase SHA-256 digest")
+    runtime = RuntimeSecrets()
+    app_config = load_app_config(settings, secrets=runtime)
+    try:
+        output = freeze_chronological_splits(
+            articles,
+            sample_hash=sample_hash,
+            output_root=output_root,
             data_root=app_config.storage.data_root,
             duckdb_path=app_config.storage.duckdb_path,
         )

@@ -174,3 +174,16 @@ def test_local_run_verifies_sample_and_persists_valid_results(tmp_path: Path) ->
     manifest_result = result.manifest_path.read_text(encoding="utf-8")
     assert '"valid_count": 10' in manifest_result
     assert '"status": "complete"' in manifest_result
+
+    def unexpected_client() -> _FakeClient:
+        raise AssertionError("completed local run attempted inference again")
+
+    rerun = run_local_classification(
+        config,
+        data_root=tmp_path,
+        duckdb_path=tmp_path / "research.duckdb",
+        client_factory=unexpected_client,
+        telemetry_factory=_FakeTelemetry,
+    )
+    assert rerun == result
+    assert rerun.manifest_path.read_text(encoding="utf-8") == manifest_result

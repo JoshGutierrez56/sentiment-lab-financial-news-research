@@ -1,0 +1,22 @@
+name: hybrid_primary_specification_v1
+development_validation_events_path: data/results/prediction_3da252adca69e9e9/events.parquet
+expected_events_sha256: 25e574dcb3007ce157a0506113afb4eb9a17adb3a90e334e1534c0e008044c38
+sample_hash: 7b07079fb2bcbf7546e1dd810ee081ddb86adb7bb37aa0979efac31fe30553a7
+split_assignment_hash: 0a96016b3398c9bb43fe30f088316af2604e4026d1c8bc92cfa6131f7f708b43
+signals:
+  - raw_sentiment
+  - sentiment_confidence
+  - sentiment_confidence_materiality
+  - sentiment_confidence_materiality_novelty
+aggregations:
+  - event_level
+  - strongest_company_day
+  - company_day_aggregate
+confidence_thresholds: [0.0, 0.5, 0.7]
+relevance_thresholds: [0.0, 0.5, 0.7]
+materiality_thresholds: [0.0, 0.25, 0.5]
+minimum_validation_events: 100
+minimum_validation_coverage: 0.25
+maximum_company_weight: 0.02
+base_cost_bps: 10.0
+conservative_cost_bps: 25.0

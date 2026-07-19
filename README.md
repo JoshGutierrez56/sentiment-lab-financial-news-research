@@ -128,6 +128,10 @@ always resumed; there is no force-reclassify switch.
 ```powershell
 uv run sentiment-lab hybrid sample-sync --config config/experiments/hybrid_5000.yaml
 uv run sentiment-lab hybrid local-run --config config/experiments/hybrid_local_5000.yaml
+uv run sentiment-lab hybrid splits-freeze `
+  --articles data/normalized/hybrid_5000/7b07079fb2bcbf7546e1dd810ee081ddb86adb7bb37aa0979efac31fe30553a7/articles.parquet `
+  --sample-hash 7b07079fb2bcbf7546e1dd810ee081ddb86adb7bb37aa0979efac31fe30553a7 `
+  --output-root data/normalized/hybrid_5000/7b07079fb2bcbf7546e1dd810ee081ddb86adb7bb37aa0979efac31fe30553a7
 uv run sentiment-lab hybrid prediction-run --config config/experiments/hybrid_prediction_devval.yaml
 uv run sentiment-lab hybrid spec-freeze --config config/experiments/hybrid_specification.yaml
 uv run sentiment-lab hybrid calibration-select --config config/experiments/hybrid_calibration_select.yaml
@@ -139,9 +143,9 @@ uv run sentiment-lab hybrid portfolio-run --config config/experiments/hybrid_por
 uv run sentiment-lab hybrid report-build --config config/experiments/hybrid_final_report.yaml
 ```
 
-The downstream YAML files are materialized only after their input artifact
-hashes exist. Holdout commands fail closed until the primary specification is
-frozen.
+The downstream YAML files contain immutable input hashes produced by earlier
+steps. Create or verify the split artifact before prediction analysis. Holdout
+commands fail closed until the primary specification is frozen.
 
 Each completed result directory contains:
 

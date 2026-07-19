@@ -62,6 +62,7 @@ class AdditionalOpenAIRunConfig(BaseModel):
     expected_sample_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
     prompt_variant: str = "evidence_v2"
     budget_limit_usd: float = Field(default=1.0, gt=0.0, le=1.0)
+    maximum_escalations: int = Field(default=55, ge=0, le=250)
 
 
 def _priority_bucket(
@@ -339,14 +340,23 @@ def run_additional_openai_calibration(
             sentiment_config.escalation_ambiguity_materiality_threshold
         ),
     )
+    custom_ids = classifier.batch_custom_ids(targets, prompt_variant=config.prompt_variant)
+    prior_usage = client.audit_saved_batch_usage(custom_ids)
+    prior_cost = float(prior_usage["actual_api_cost_usd"])
+    remaining_budget = config.budget_limit_usd - prior_cost
+    if remaining_budget <= 0:
+        raise RuntimeError("Additional OpenAI calibration has exhausted its $1 hard guard")
     run = classifier.classify_targets(
         targets,
         prompt_variant=config.prompt_variant,
-        budget_limit_usd=config.budget_limit_usd,
+        budget_limit_usd=remaining_budget,
+        maximum_escalations=config.maximum_escalations,
     )
     if len(run.final_records) != sample.height:
         raise RuntimeError("OpenAI calibration did not return every requested classification")
-    if run.current_run_cost_usd > config.budget_limit_usd + 1e-9:
+    cumulative_usage = client.audit_saved_batch_usage(custom_ids)
+    cumulative_cost = float(cumulative_usage["actual_api_cost_usd"])
+    if cumulative_cost > config.budget_limit_usd + 1e-9:
         raise RuntimeError("Additional OpenAI calibration exceeded the $1 hard guard")
     root = (
         app_config.storage.data_root
@@ -369,7 +379,10 @@ def run_additional_openai_calibration(
         "sample_hash": config.expected_sample_hash,
         "valid_classification_count": len(run.final_records),
         "budget_limit_usd": config.budget_limit_usd,
-        "actual_openai_cost_usd": run.current_run_cost_usd,
+        "actual_openai_cost_usd": cumulative_cost,
+        "current_run_cost_usd": run.current_run_cost_usd,
+        "prior_openai_cost_usd": prior_cost,
+        "usage_audit": cumulative_usage,
         "summary": run.summary(),
         "models": dict(Counter(record.model for record in run.final_records)),
         "artifacts": {

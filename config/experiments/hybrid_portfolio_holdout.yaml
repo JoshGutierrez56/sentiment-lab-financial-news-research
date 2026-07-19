@@ -1,0 +1,22 @@
+name: hybrid_portfolio_untouched_holdout_v1
+articles_path: data/normalized/hybrid_5000/7b07079fb2bcbf7546e1dd810ee081ddb86adb7bb37aa0979efac31fe30553a7/articles.parquet
+classifications_path: data/results/hybrid_local_3c4cdaf2fd9d9a16/classifications.parquet
+splits_path: data/normalized/hybrid_5000/7b07079fb2bcbf7546e1dd810ee081ddb86adb7bb37aa0979efac31fe30553a7/splits.parquet
+prices_path: data/normalized/hybrid_5000/7b07079fb2bcbf7546e1dd810ee081ddb86adb7bb37aa0979efac31fe30553a7/prices.parquet
+expected_hashes:
+  articles: 8ada422fcdefa894c55ae51400e073f97fa6d8e26272cde98d8926ce27b68385
+  classifications: 43bdba5e10e5337ecb676e829bdf28633f304b29e3c131baaf8df6fb0167202e
+  splits: b9d022cd06b87ff1e805138f58b588aea4762bba1bd0d01e3c184f3b243167c4
+  prices: 4f030c49deea3dd536dcb4d06f3b41d8447492ebfae2370d3646bb615ce79615
+evaluation_splits: [holdout]
+specification:
+  signal: sentiment_confidence
+  aggregation: strongest_company_day
+  minimum_confidence: 0.0
+  minimum_relevance: 0.0
+  minimum_materiality: 0.5
+  holding_periods: [5, 21]
+  maximum_company_weight: 0.02
+  base_cost_bps: 10.0
+  conservative_cost_bps: 25.0
+primary_specification_manifest: data/results/primary_2a00b8c0f1ed0fa8/manifest.json

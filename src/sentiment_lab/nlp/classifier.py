@@ -491,6 +491,7 @@ class ArticleClassifier:
         *,
         prompt_variant: str,
         budget_limit_usd: float,
+        maximum_escalations: int | None = None,
     ) -> ClassificationRun:
         """Classify ticker-specific targets in one first-pass batch.
 
@@ -502,6 +503,8 @@ class ArticleClassifier:
             raise ValueError("targets must not be empty")
         if budget_limit_usd <= 0:
             raise ValueError("budget_limit_usd must be positive")
+        if maximum_escalations is not None and maximum_escalations < 0:
+            raise ValueError("maximum_escalations must be non-negative")
         prompt_version = PROMPT_VERSIONS[prompt_variant]
         ledger: list[ClassificationLedgerEntry] = []
         executions: list[BatchExecution] = []
@@ -538,8 +541,34 @@ class ArticleClassifier:
             index: self._escalation_reasons(target.article, first_records.get(index))
             for index, target in enumerate(targets)
         }
-        escalation_indices = [index for index, reasons in reasons_by_index.items() if reasons]
         final_records: dict[int, ClassificationRecord] = dict(first_records)
+        escalation_indices = [index for index, reasons in reasons_by_index.items() if reasons]
+        if maximum_escalations is not None and len(escalation_indices) > maximum_escalations:
+
+            def priority(index: int) -> tuple[int, int]:
+                reasons = reasons_by_index[index]
+                if "structured_output_validation_repeated_failure" in reasons:
+                    return (0, index)
+                if any(reason.startswith("event_type:") for reason in reasons):
+                    return (1, index)
+                if "high_materiality" in reasons:
+                    return (2, index)
+                if "contradictory_article_evidence" in reasons:
+                    return (3, index)
+                return (4, index)
+
+            ranked = sorted(escalation_indices, key=priority)
+            escalation_indices = ranked[:maximum_escalations]
+            for index in ranked[maximum_escalations:]:
+                record = first_records.get(index)
+                if record is not None:
+                    final_reason = [
+                        *reasons_by_index[index],
+                        "budget_limited_escalation_skipped",
+                    ]
+                    final_records[index] = record.model_copy(
+                        update={"escalation_reasons": final_reason}
+                    )
         if escalation_indices:
             spent = sum(entry.run_cost_usd for entry in ledger)
             escalation_prepared = [

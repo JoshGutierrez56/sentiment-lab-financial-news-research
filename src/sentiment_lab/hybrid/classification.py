@@ -190,6 +190,24 @@ def run_local_classification(
     classifications_path = root / "classifications.parquet"
     failures_path = root / "failures.json"
     manifest_path = root / "manifest.json"
+
+    # A completed run is an immutable research artifact.  A cache-only rerun
+    # must not replace its measured runtime, token, or GPU telemetry with the
+    # cost of reading the cache.
+    if classifications_path.is_file() and manifest_path.is_file():
+        existing_manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        existing_ids = pl.read_parquet(classifications_path, columns=["article_id"])
+        if (
+            existing_manifest.get("status") == "complete"
+            and existing_manifest.get("config_hash") == config_hash
+            and existing_manifest.get("sample_hash") == config.expected_sample_hash
+            and existing_manifest.get("sample_articles_sha256")
+            == config.expected_articles_sha256
+            and existing_ids.height == articles.height
+            and existing_ids.get_column("article_id").n_unique() == articles.height
+        ):
+            return HybridLocalRunOutput(run_id, classifications_path, manifest_path)
+
     store = ArtifactStore(data_root, duckdb_path)
     cache = LocalClassificationCache(data_root)
     telemetry = telemetry_factory(interval_seconds=config.telemetry_interval_seconds)

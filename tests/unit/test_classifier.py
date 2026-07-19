@@ -213,6 +213,47 @@ def test_expensive_escalation_waits_for_complete_first_pass(tmp_path: Path) -> N
     assert result.summary()["expensive_model_api_calls"] == 2
 
 
+def test_budget_limited_escalation_prioritizes_material_events(tmp_path: Path) -> None:
+    low_confidence = make_article(article_id="a" * 64, title="Low confidence")
+    earnings = make_article(article_id="b" * 64, title="Earnings event")
+    high_materiality = make_article(article_id="c" * 64, title="Material event")
+
+    def factory(article: object, stage: str) -> ArticleAssessment:
+        if stage == "escalation":
+            return _assessment(article, confidence=0.95, materiality=0.60)
+        if article.title == "Low confidence":
+            return _assessment(article, confidence=0.60)
+        if article.title == "Earnings event":
+            return _assessment(article, event_type=EventType.earnings_results)
+        return _assessment(article, materiality=0.90)
+
+    articles = [low_confidence, earnings, high_materiality]
+    gateway = FakeBatchGateway(articles, factory)
+    targets = [
+        ClassificationTarget(article, "AAPL.US", "Apple Inc.") for article in articles
+    ]
+    result = _classifier(tmp_path, gateway).classify_targets(
+        targets,
+        prompt_variant="evidence_v2",
+        budget_limit_usd=1.0,
+        maximum_escalations=2,
+    )
+
+    assert gateway.stage_calls == [
+        ("first_pass", "gpt-5.4-mini", 3),
+        ("escalation", "gpt-5.4", 2),
+    ]
+    assert [record.stage for record in result.final_records] == [
+        "first_pass",
+        "escalation",
+        "escalation",
+    ]
+    assert result.final_records[0].escalation_reasons == [
+        "confidence_below_threshold",
+        "budget_limited_escalation_skipped",
+    ]
+
+
 def test_contradiction_detection_handles_punctuation() -> None:
     contradictory = make_article(
         title="Apple reports record growth, but warns of weak profit",
