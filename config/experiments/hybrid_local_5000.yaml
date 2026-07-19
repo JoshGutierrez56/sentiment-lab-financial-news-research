@@ -1,0 +1,24 @@
+name: locked_hybrid_local_5000
+sample_manifest_path: data/normalized/hybrid_5000/7b07079fb2bcbf7546e1dd810ee081ddb86adb7bb37aa0979efac31fe30553a7/manifest.json
+sample_articles_path: data/normalized/hybrid_5000/7b07079fb2bcbf7546e1dd810ee081ddb86adb7bb37aa0979efac31fe30553a7/articles.parquet
+expected_sample_hash: 7b07079fb2bcbf7546e1dd810ee081ddb86adb7bb37aa0979efac31fe30553a7
+expected_articles_sha256: 8ada422fcdefa894c55ae51400e073f97fa6d8e26272cde98d8926ce27b68385
+expected_article_count: 5000
+model:
+  model: qwen3.6:35b-a3b
+  quantization: Q4_K_M
+  context_window: 8192
+  max_output_tokens: 256
+  temperature: 0.0
+  seed: 20260718
+  maximum_validation_attempts: 3
+quality_gates:
+  maximum_invalid_fraction: 0.02
+  maximum_other_fraction: 0.40
+  minimum_tradable_fraction: 0.25
+  maximum_label_fraction: 0.85
+  maximum_projected_runtime_days: 7.0
+  minimum_observations: 500
+checkpoint_interval: 25
+telemetry_interval_seconds: 1.0
+electricity_rate_usd_per_kwh: 0.25

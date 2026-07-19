@@ -17,7 +17,7 @@ maximum_other_fraction: 0.30
 minimum_sectors: 11
 maximum_ticker_fraction: 0.02
 random_seed: 20260718
-frozen_sample_hash:
+frozen_sample_hash: 7b07079fb2bcbf7546e1dd810ee081ddb86adb7bb37aa0979efac31fe30553a7
 universe:
   # Information Technology (15)
   - {ticker: AAPL.US, company_name: Apple Inc., sector: Information Technology, aliases: [Apple]}
