@@ -151,3 +151,27 @@ def test_hybrid_config_rejects_wrong_horizons() -> None:
         assert "exactly 1, 3, 5, 10, 21, 63" in str(exc)
     else:  # pragma: no cover
         raise AssertionError("invalid horizons were accepted")
+
+
+def test_hybrid_config_allows_return_blind_backfill_for_sparse_company_years() -> None:
+    members = [
+        ValidationUniverseMember(
+            ticker=f"T{index:03d}.US",
+            company_name=f"Company {index}",
+            sector=f"Sector {index % 11}",
+        )
+        for index in range(100)
+    ]
+    config = HybridSampleConfig(
+        name="sparse_years",
+        news_start=date(2022, 1, 1),
+        news_end=date(2026, 3, 31),
+        universe=members,
+        articles_per_company=50,
+        articles_per_company_year=10,
+        minimum_articles_per_company_year=0,
+        minimum_years_per_company=3,
+        max_articles=5000,
+    )
+    assert config.minimum_articles_per_company_year == 0
+    assert config.minimum_years_per_company == 3

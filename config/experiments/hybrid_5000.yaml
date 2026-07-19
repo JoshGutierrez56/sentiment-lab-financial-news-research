@@ -3,7 +3,8 @@ news_start: 2022-01-01
 news_end: 2026-03-31
 articles_per_company: 40
 articles_per_company_year: 8
-minimum_articles_per_company_year: 5
+minimum_articles_per_company_year: 0
+minimum_years_per_company: 3
 candidates_per_quarter: 60
 max_articles: 5000
 minimum_relevance_score: 0.55

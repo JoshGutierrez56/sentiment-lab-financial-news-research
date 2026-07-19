@@ -39,7 +39,8 @@ class HybridSampleConfig(BaseModel):
     universe: list[ValidationUniverseMember] = Field(min_length=100)
     articles_per_company: int = Field(default=40, ge=1, le=100)
     articles_per_company_year: int = Field(default=8, ge=1, le=25)
-    minimum_articles_per_company_year: int = Field(default=5, ge=1, le=25)
+    minimum_articles_per_company_year: int = Field(default=0, ge=0, le=25)
+    minimum_years_per_company: int = Field(default=3, ge=2, le=10)
     candidates_per_quarter: int = Field(default=60, ge=10, le=250)
     max_articles: int = Field(default=5000, ge=1, le=5000)
     minimum_relevance_score: float = Field(default=0.55, ge=0.0, le=1.0)
@@ -70,6 +71,8 @@ class HybridSampleConfig(BaseModel):
             raise ValueError("Per-company total must equal per-year total times year count")
         if self.minimum_articles_per_company_year > self.articles_per_company_year:
             raise ValueError("Minimum per-year coverage cannot exceed the target")
+        if self.minimum_years_per_company > years:
+            raise ValueError("Minimum company-year coverage exceeds the sample period")
         if len(self.universe) * self.articles_per_company != self.max_articles:
             raise ValueError("Universe size times per-company total must equal max_articles")
         if len({item.ticker for item in self.universe}) != len(self.universe):
@@ -437,6 +440,14 @@ def sync_hybrid_sample(
             )
         if len(company_selected) != config.articles_per_company:
             raise RuntimeError(f"{member.ticker} did not produce its frozen allocation")
+        represented_years = {
+            item.article.provider_timestamp.year for item in company_selected
+        }
+        if len(represented_years) < config.minimum_years_per_company:
+            raise RuntimeError(
+                f"{member.ticker} spans only {len(represented_years)} years; "
+                f"minimum {config.minimum_years_per_company} required"
+            )
         selected.extend(company_selected)
 
     selected.sort(key=lambda item: (item.article.provider_timestamp, item.member.ticker, item.article.article_id))
