@@ -201,8 +201,13 @@ def freeze_additional_openai_sample(
         )
 
     for bucket, target in bucket_targets.items():
+        if len(selected) >= config.maximum_articles:
+            break
         for row in candidates:
-            if bucket_counts[bucket] >= target:
+            if (
+                len(selected) >= config.maximum_articles
+                or bucket_counts[bucket] >= target
+            ):
                 break
             if bucket not in row["calibration_buckets"] or not allowed(row):
                 continue
