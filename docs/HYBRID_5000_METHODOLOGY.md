@@ -95,6 +95,11 @@ series. A new same-ticker signal arriving during an active holding period is sup
 duplicate-story or overlapping-cohort multiplication. Sharpe is calculated only from these daily
 marked series.
 
+Forward-return windows are purged at split boundaries. A development observation is excluded for a
+given horizon when its exit date reaches the first validation entry date; the equivalent rule is
+applied between validation and holdout. Raw split membership remains exactly 60/20/20, while each
+horizon reports its smaller leakage-safe effective count.
+
 ## Known limitations frozen before results
 
 - The holdout is concentrated in the first quarter of 2026 and is not a multi-year holdout.

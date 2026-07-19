@@ -15,7 +15,7 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from sentiment_lab.data.cache import stable_json
 from sentiment_lab.data.storage import ArtifactStore, file_sha256
-from sentiment_lab.hybrid.analysis import HORIZONS, _corr
+from sentiment_lab.hybrid.analysis import HORIZONS, _corr, _purge_overlapping_split_returns
 
 _POSITIVE = {
     "approval",
@@ -158,6 +158,7 @@ def run_baselines(
         "title",
         "content",
         "provider_sentiment_polarity",
+        *[f"exit_date_{horizon}d" for horizon in HORIZONS],
         *[f"future_return_{horizon}d" for horizon in HORIZONS],
     )
     local = pl.read_parquet(config.classifications_path).select(
@@ -179,6 +180,18 @@ def run_baselines(
             pl.col("provider_sentiment_polarity").cast(pl.Float64).alias("eodhd_sentiment"),
         )
         .sort(["provider_timestamp", "ticker", "article_id"])
+    )
+    split_minimums = {
+        split: frame.filter(pl.col("research_split") == split)["entry_date"].min()
+        for split in ("development", "validation", "holdout")
+    }
+    frame = frame.with_columns(
+        pl.when(pl.col("research_split") == "development")
+        .then(pl.lit(split_minimums["validation"]))
+        .when(pl.col("research_split") == "validation")
+        .then(pl.lit(split_minimums["holdout"]))
+        .otherwise(pl.lit(None, dtype=pl.Date))
+        .alias("next_split_entry_date")
     )
     development = frame.filter(pl.col("research_split") == "development")
     class_frequencies = Counter(development["sentiment_label"].to_list())
@@ -219,20 +232,29 @@ def run_baselines(
     results: dict[str, Any] = {
         "definition": "All price baselines use closes available before conservative entry.",
         "development_class_frequencies": dict(class_frequencies),
+        "split_purge_boundaries": {
+            "development": split_minimums["validation"],
+            "validation": split_minimums["holdout"],
+            "holdout": None,
+        },
         "splits": {},
     }
     for split in config.evaluation_splits:
         selected = frame.filter(pl.col("research_split") == split)
         results["splits"][split] = {}
         for horizon in HORIZONS:
-            returns = selected[f"future_return_{horizon}d"].to_numpy().astype(float)
+            selected_horizon = _purge_overlapping_split_returns(selected, horizon)
+            development_horizon = _purge_overlapping_split_returns(
+                development, horizon
+            )
+            returns = selected_horizon[f"future_return_{horizon}d"].to_numpy().astype(float)
             event_means = (
-                development.group_by("event_type")
+                development_horizon.group_by("event_type")
                 .agg(pl.col(f"future_return_{horizon}d").mean().alias("event_type_signal"))
             )
-            evaluated = selected.join(event_means, on="event_type", how="left").with_columns(
-                pl.col("event_type_signal").fill_null(0.0)
-            )
+            evaluated = selected_horizon.join(
+                event_means, on="event_type", how="left"
+            ).with_columns(pl.col("event_type_signal").fill_null(0.0))
             horizon_result = {
                 name: _metrics(evaluated[name].to_numpy().astype(float), returns)
                 for name in (*signal_names, "event_type_signal")

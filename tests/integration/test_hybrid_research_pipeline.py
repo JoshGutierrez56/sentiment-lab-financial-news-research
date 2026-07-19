@@ -30,7 +30,7 @@ def _artifacts(tmp_path: Path) -> dict[str, Path]:
     for index in range(5000):
         ticker = tickers[index % len(tickers)]
         timestamp = start + timedelta(hours=index)
-        entry_date = date(2022, 2, 1) + timedelta(days=index % 80)
+        entry_date = date(2022, 2, 1) + timedelta(days=index // 10)
         label = labels[index % 3]
         score = scores[index % 3]
         article_id = f"article-{index:05d}"
@@ -54,6 +54,10 @@ def _artifacts(tmp_path: Path) -> dict[str, Path]:
                 "story_cluster_id": f"cluster-{index}",
                 "pre_inference_event_candidates": ["earnings"],
                 "entry_date": entry_date,
+                **{
+                    f"exit_date_{horizon}d": entry_date + timedelta(days=horizon)
+                    for horizon in (1, 3, 5, 10, 21, 63)
+                },
                 **{
                     f"future_return_{horizon}d": score * horizon / 10_000 + 0.001
                     for horizon in (1, 3, 5, 10, 21, 63)
@@ -82,7 +86,7 @@ def _artifacts(tmp_path: Path) -> dict[str, Path]:
         split_rows.append({"article_id": article_id, "research_split": split})
     price_rows: list[dict[str, Any]] = []
     for ticker in tickers:
-        for offset in range(160):
+        for offset in range(570):
             close = 100.0 + offset / 10
             price_rows.append(
                 {
@@ -164,7 +168,7 @@ def test_baselines_portfolio_and_additional_selection_run_on_frozen_inputs(
         duckdb_path=tmp_path / "research.duckdb",
     )
     baseline = json.loads(baseline_path.read_text(encoding="utf-8"))
-    assert baseline["splits"]["validation"]["5d"]["keyword_sentiment"]["n"] == 1000
+    assert baseline["splits"]["validation"]["5d"]["keyword_sentiment"]["n"] == 950
 
     portfolio_path = run_portfolio_backtests(
         PortfolioRunConfig(

@@ -1,12 +1,14 @@
-from __future__ import annotations
+from datetime import date
 
 import numpy as np
+import polars as pl
 
 from sentiment_lab.hybrid.analysis import (
     PredictionAnalysisConfig,
     _clustered_slope,
     _corr,
     _date_block_bootstrap,
+    _purge_overlapping_split_returns,
 )
 
 
@@ -48,3 +50,15 @@ def test_holdout_config_fails_closed_without_frozen_specification() -> None:
         assert "frozen primary specification" in str(exc)
     else:  # pragma: no cover
         raise AssertionError("holdout access was accepted without a frozen specification")
+
+
+def test_forward_windows_crossing_next_split_are_purged() -> None:
+    frame = pl.DataFrame(
+        {
+            "exit_date_5d": [date(2025, 12, 31), date(2026, 1, 2)],
+            "next_split_entry_date": [date(2026, 1, 2), date(2026, 1, 2)],
+        }
+    )
+    purged = _purge_overlapping_split_returns(frame, 5)
+    assert purged.height == 1
+    assert purged["exit_date_5d"][0] == date(2025, 12, 31)

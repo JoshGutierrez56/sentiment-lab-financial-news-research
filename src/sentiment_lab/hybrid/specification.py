@@ -64,8 +64,18 @@ def _aggregate(frame: pl.DataFrame, method: str, signal: str) -> pl.DataFrame:
         raise ValueError(f"Unknown aggregation method: {method}")
     return frame.group_by(keys, maintain_order=True).agg(
         pl.col(signal).mean(),
+        pl.col("next_split_entry_date").first(),
+        pl.col("exit_date_5d").first(),
+        pl.col("exit_date_21d").first(),
         pl.col("future_return_5d").first(),
         pl.col("future_return_21d").first(),
+    )
+
+
+def _purged(frame: pl.DataFrame, horizon: int) -> pl.DataFrame:
+    return frame.filter(
+        pl.col("next_split_entry_date").is_null()
+        | (pl.col(f"exit_date_{horizon}d") < pl.col("next_split_entry_date"))
     )
 
 
@@ -163,7 +173,11 @@ def freeze_primary_specification(
         metrics = {
             split: {
                 f"{horizon}d": _association(
-                    evaluated.filter(pl.col("research_split") == split), signal, horizon
+                    _purged(
+                        evaluated.filter(pl.col("research_split") == split), horizon
+                    ),
+                    signal,
+                    horizon,
                 )
                 for horizon in (5, 21)
             }

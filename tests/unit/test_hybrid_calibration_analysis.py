@@ -25,6 +25,12 @@ def _write_inputs(root: Path, *, holdout: bool = False) -> dict[str, Path]:
             "sector": ["Technology", "Financials"] * 6,
             "entry_date": [date(2024, 1, index + 1) for index in range(12)],
             **{
+                f"exit_date_{horizon}d": [
+                    date(2024, 1, index + 1) for index in range(12)
+                ]
+                for horizon in (1, 3, 5, 10, 21, 63)
+            },
+            **{
                 f"future_return_{horizon}d": [value * horizon / 5 for value in returns]
                 for horizon in (1, 3, 5, 10, 21, 63)
             },

@@ -250,6 +250,15 @@ def _horizon_metrics(
     }
 
 
+def _purge_overlapping_split_returns(frame: pl.DataFrame, horizon: int) -> pl.DataFrame:
+    """Exclude outcomes whose measurement window reaches the next split."""
+
+    boundary = pl.col("next_split_entry_date")
+    return frame.filter(
+        boundary.is_null() | (pl.col(f"exit_date_{horizon}d") < boundary)
+    )
+
+
 def _add_signals(frame: pl.DataFrame) -> pl.DataFrame:
     return frame.with_columns(
         pl.col("sentiment_score").alias("raw_sentiment"),
@@ -294,6 +303,8 @@ def _company_day(frame: pl.DataFrame, *, strongest: bool) -> pl.DataFrame:
             pl.col("sector").first(),
             pl.col("event_type").first(),
             pl.col("provider_timestamp").min(),
+            pl.col("next_split_entry_date").first(),
+            *[pl.col(f"exit_date_{horizon}d").first() for horizon in HORIZONS],
             *[pl.col(f"future_return_{horizon}d").first() for horizon in HORIZONS],
         ]
     )
@@ -311,6 +322,24 @@ def _company_day(frame: pl.DataFrame, *, strongest: bool) -> pl.DataFrame:
 
 
 def _breakdown(frame: pl.DataFrame, group: str) -> list[dict[str, Any]]:
+    primary_expressions: list[pl.Expr] = []
+    for horizon in PRIMARY_HORIZONS:
+        eligible = pl.col("next_split_entry_date").is_null() | (
+            pl.col(f"exit_date_{horizon}d") < pl.col("next_split_entry_date")
+        )
+        primary_expressions.extend(
+            [
+                eligible.cast(pl.Int64).sum().alias(f"eligible_{horizon}d"),
+                pl.when(eligible)
+                .then(
+                    pl.col("sentiment_score").sign()
+                    * pl.col(f"future_return_{horizon}d")
+                )
+                .otherwise(None)
+                .mean()
+                .alias(f"average_signed_return_{horizon}d"),
+            ]
+        )
     return (
         frame.group_by(group)
         .agg(
@@ -318,15 +347,7 @@ def _breakdown(frame: pl.DataFrame, group: str) -> list[dict[str, Any]]:
             pl.col("tradable").sum().alias("tradable"),
             pl.col("abstain").sum().alias("abstain"),
             pl.col("sentiment_score").mean().alias("mean_sentiment_score"),
-            *[
-                (
-                    pl.col("sentiment_score").sign()
-                    * pl.col(f"future_return_{horizon}d")
-                )
-                .mean()
-                .alias(f"average_signed_return_{horizon}d")
-                for horizon in PRIMARY_HORIZONS
-            ],
+            *primary_expressions,
         )
         .sort("n", descending=True)
         .to_dicts()
@@ -367,6 +388,7 @@ def run_prediction_analysis(
         "entry_date",
         "story_cluster_id",
         "provider_sentiment_polarity",
+        *[f"exit_date_{horizon}d" for horizon in HORIZONS],
         *[f"future_return_{horizon}d" for horizon in HORIZONS],
     ]
     articles = pl.read_parquet(config.articles_path, columns=article_columns)
@@ -374,9 +396,23 @@ def run_prediction_analysis(
     splits = pl.read_parquet(config.splits_path, columns=["article_id", "research_split"])
     if articles.height != 5000 or classifications.height != 5000 or splits.height != 5000:
         raise RuntimeError("Prediction inputs must each contain exactly 5,000 rows")
+    joined = articles.join(
+        classifications, on=["article_id", "ticker"], validate="1:1"
+    ).join(splits, on="article_id", validate="1:1")
+    split_minimums = {
+        split: joined.filter(pl.col("research_split") == split)["entry_date"].min()
+        for split in ("development", "validation", "holdout")
+    }
+    joined = joined.with_columns(
+        pl.when(pl.col("research_split") == "development")
+        .then(pl.lit(split_minimums["validation"]))
+        .when(pl.col("research_split") == "validation")
+        .then(pl.lit(split_minimums["holdout"]))
+        .otherwise(pl.lit(None, dtype=pl.Date))
+        .alias("next_split_entry_date")
+    )
     frame = _add_signals(
-        articles.join(classifications, on=["article_id", "ticker"], validate="1:1")
-        .join(splits, on="article_id", validate="1:1")
+        joined
         .filter(pl.col("research_split").is_in(config.included_splits))
         .with_columns(
             pl.col("provider_timestamp").dt.year().alias("year"),
@@ -417,16 +453,26 @@ def run_prediction_analysis(
         "event_level": {},
         "strongest_company_day": {},
         "company_day_aggregate": {},
+        "split_purge_boundaries": {
+            "development": split_minimums["validation"],
+            "validation": split_minimums["holdout"],
+            "holdout": None,
+        },
         "breakdowns": {
-            group: _breakdown(frame, group)
-            for group in (
-                "year",
-                "sector",
-                "ticker",
-                "event_type",
-                "confidence_bucket",
-                "materiality_bucket",
-            )
+            split: {
+                group: _breakdown(
+                    frame.filter(pl.col("research_split") == split), group
+                )
+                for group in (
+                    "year",
+                    "sector",
+                    "ticker",
+                    "event_type",
+                    "confidence_bucket",
+                    "materiality_bucket",
+                )
+            }
+            for split in config.included_splits
         },
         "excluding_other": {},
     }
@@ -442,7 +488,7 @@ def run_prediction_analysis(
             for signal in SIGNALS:
                 metrics[representation][split][signal] = {
                     f"{horizon}d": _horizon_metrics(
-                        split_frame,
+                        _purge_overlapping_split_returns(split_frame, horizon),
                         signal_column=signal,
                         horizon=horizon,
                         threshold=threshold,
@@ -456,7 +502,7 @@ def run_prediction_analysis(
         split_frame = without_other.filter(pl.col("research_split") == split)
         metrics["excluding_other"][split] = {
             f"{horizon}d": _horizon_metrics(
-                split_frame,
+                _purge_overlapping_split_returns(split_frame, horizon),
                 signal_column="sentiment_confidence_materiality",
                 horizon=horizon,
                 threshold=threshold,

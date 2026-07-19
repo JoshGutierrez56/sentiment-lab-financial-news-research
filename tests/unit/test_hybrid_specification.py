@@ -33,6 +33,9 @@ def test_company_day_aggregation_prevents_story_multiplication() -> None:
             "research_split": ["development", "development"],
             "ticker": ["A.US", "A.US"],
             "entry_date": ["2024-01-02", "2024-01-02"],
+            "next_split_entry_date": [None, None],
+            "exit_date_5d": ["2024-01-09", "2024-01-09"],
+            "exit_date_21d": ["2024-02-01", "2024-02-01"],
             "signal": [0.4, 0.8],
             "future_return_5d": [0.1, 0.1],
             "future_return_21d": [0.2, 0.2],
@@ -52,6 +55,11 @@ def test_primary_specification_freezes_without_holdout_rows(tmp_path: Path) -> N
                 "research_split": "development" if index < 100 else "validation",
                 "ticker": f"T{index % 20}.US",
                 "entry_date": date(2024, 1, 1) + timedelta(days=index),
+                "next_split_entry_date": (
+                    date(2025, 1, 1) if index < 100 else date(2026, 1, 1)
+                ),
+                "exit_date_5d": date(2024, 1, 1) + timedelta(days=index + 5),
+                "exit_date_21d": date(2024, 1, 1) + timedelta(days=index + 21),
                 "tradable": True,
                 "abstain": False,
                 "confidence": 0.8,

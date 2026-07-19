@@ -13,7 +13,12 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from sentiment_lab.data.cache import stable_json
 from sentiment_lab.data.storage import ArtifactStore, file_sha256
-from sentiment_lab.hybrid.analysis import HORIZONS, _corr, _horizon_metrics
+from sentiment_lab.hybrid.analysis import (
+    HORIZONS,
+    _corr,
+    _horizon_metrics,
+    _purge_overlapping_split_returns,
+)
 
 
 class CalibrationAnalysisConfig(BaseModel):
@@ -59,7 +64,9 @@ def _predictive_metrics(
     return {
         split: {
             f"{horizon}d": _horizon_metrics(
-                renamed.filter(pl.col("research_split") == split),
+                _purge_overlapping_split_returns(
+                    renamed.filter(pl.col("research_split") == split), horizon
+                ),
                 signal_column="sentiment_confidence_materiality",
                 horizon=horizon,
                 threshold=0.0,
@@ -104,9 +111,19 @@ def run_calibration_analysis(
         "ticker",
         "sector",
         "entry_date",
+        *[f"exit_date_{horizon}d" for horizon in HORIZONS],
         *[f"future_return_{horizon}d" for horizon in HORIZONS],
     ]
     articles = pl.read_parquet(config.articles_path, columns=article_columns)
+    all_split_dates = articles.select("article_id", "entry_date").join(
+        splits, on="article_id", validate="1:1"
+    )
+    split_minimums = {
+        split: all_split_dates.filter(pl.col("research_split") == split)[
+            "entry_date"
+        ].min()
+        for split in ("development", "validation", "holdout")
+    }
     common = [
         "article_id",
         "sentiment_score",
@@ -128,6 +145,14 @@ def run_calibration_analysis(
         selected_splits.join(articles, on="article_id", validate="1:1")
         .join(local, on="article_id", validate="1:1")
         .join(openai, on="article_id", validate="1:1")
+        .with_columns(
+            pl.when(pl.col("research_split") == "development")
+            .then(pl.lit(split_minimums["validation"]))
+            .when(pl.col("research_split") == "validation")
+            .then(pl.lit(split_minimums["holdout"]))
+            .otherwise(pl.lit(None, dtype=pl.Date))
+            .alias("next_split_entry_date")
+        )
         .sort("entry_date", "ticker", "article_id")
     )
     if frame.height != selected_splits.height:
@@ -182,6 +207,11 @@ def run_calibration_analysis(
         ),
         "count": frame.height,
         "split_counts": dict(Counter(frame["research_split"].to_list())),
+        "split_purge_boundaries": {
+            "development": split_minimums["validation"],
+            "validation": split_minimums["holdout"],
+            "holdout": None,
+        },
         "agreement": agreement,
         "label_counts": {
             "local": dict(Counter(frame["local_sentiment_label"].to_list())),
