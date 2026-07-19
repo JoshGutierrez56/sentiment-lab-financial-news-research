@@ -31,6 +31,7 @@ from sentiment_lab.experiments.validation import ValidationRunner, sync_validati
 from sentiment_lab.hybrid.analysis import PredictionAnalysisConfig, run_prediction_analysis
 from sentiment_lab.hybrid.baselines import BaselineConfig, run_baselines
 from sentiment_lab.hybrid.classification import HybridLocalRunConfig, run_local_classification
+from sentiment_lab.hybrid.final_report import FinalReportConfig, build_final_report
 from sentiment_lab.hybrid.openai_calibration import (
     AdditionalCalibrationConfig,
     AdditionalOpenAIRunConfig,
@@ -470,6 +471,26 @@ def hybrid_portfolio_run(
     try:
         output = run_portfolio_backtests(
             _yaml_config(config, PortfolioRunConfig),
+            data_root=app_config.storage.data_root,
+            duckdb_path=app_config.storage.duckdb_path,
+        )
+    except (RuntimeError, ValueError) as exc:
+        _fail(str(exc))
+    typer.echo(str(output))
+
+
+@hybrid_app.command("report-build")
+def hybrid_report_build(
+    config: Annotated[Path, typer.Option(exists=True, readable=True)],
+    settings: Annotated[Path, typer.Option(exists=True)] = Path("config/settings.yaml"),
+) -> None:
+    """Verify evidence hashes and build the final HTML/results decision artifacts."""
+
+    runtime = RuntimeSecrets()
+    app_config = load_app_config(settings, secrets=runtime)
+    try:
+        output = build_final_report(
+            _yaml_config(config, FinalReportConfig),
             data_root=app_config.storage.data_root,
             duckdb_path=app_config.storage.duckdb_path,
         )
