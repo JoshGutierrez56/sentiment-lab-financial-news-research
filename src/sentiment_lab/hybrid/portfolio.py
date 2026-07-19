@@ -9,7 +9,7 @@ from collections import defaultdict
 from dataclasses import dataclass
 from datetime import date
 from pathlib import Path
-from typing import Any, cast
+from typing import Any, Literal, cast
 
 import numpy as np
 import polars as pl
@@ -23,6 +23,9 @@ class PortfolioSpecification(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
     signal: str = "sentiment_confidence_materiality"
+    aggregation: Literal["strongest_company_day", "company_day_aggregate"] = (
+        "strongest_company_day"
+    )
     minimum_confidence: float = Field(default=0.0, ge=0.0, le=1.0)
     minimum_relevance: float = Field(default=0.0, ge=0.0, le=1.0)
     minimum_materiality: float = Field(default=0.0, ge=0.0, le=1.0)
@@ -311,7 +314,7 @@ def run_portfolio_backtests(
     )
     splits = pl.read_parquet(config.splits_path).select("article_id", "research_split")
     prices = pl.read_parquet(config.prices_path)
-    events = (
+    filtered_events = (
         articles.join(classifications, on="article_id", validate="1:1")
         .join(splits, on="article_id", validate="1:1")
         .with_columns(_signal_expression(config.specification.signal).alias("portfolio_signal"))
@@ -323,12 +326,29 @@ def run_portfolio_backtests(
             & (pl.col("relevance") >= config.specification.minimum_relevance)
             & (pl.col("materiality") >= config.specification.minimum_materiality)
         )
-        .with_columns(pl.col("portfolio_signal").abs().alias("_strength"))
-        .sort("_strength", descending=True)
-        .group_by(["research_split", "ticker", "entry_date"], maintain_order=True)
-        .first()
-        .drop("_strength")
     )
+    if config.specification.aggregation == "strongest_company_day":
+        events = (
+            filtered_events.with_columns(
+                pl.col("portfolio_signal").abs().alias("_strength")
+            )
+            .sort("_strength", descending=True)
+            .group_by(["research_split", "ticker", "entry_date"], maintain_order=True)
+            .first()
+            .drop("_strength")
+        )
+    else:
+        events = (
+            filtered_events.group_by(
+                ["research_split", "ticker", "entry_date"], maintain_order=True
+            )
+            .agg(
+                pl.col("portfolio_signal").mean(),
+                pl.col("article_id").first(),
+                pl.col("sector").first(),
+            )
+            .filter(pl.col("portfolio_signal").abs() > 1e-12)
+        )
     config_hash = hashlib.sha256(stable_json(config.model_dump(mode="json")).encode()).hexdigest()
     root = data_root / "results" / f"portfolio_{config_hash[:16]}"
     store = ArtifactStore(data_root, duckdb_path)
