@@ -8,6 +8,7 @@ redesign's cache-only stage from silently changing the completed experiment.
 from __future__ import annotations
 
 import hashlib
+import importlib
 import time
 from collections.abc import Iterable
 from dataclasses import asdict, dataclass
@@ -111,17 +112,14 @@ class FinBERTAdapter:
         self, missing: list[tuple[dict[str, str], str, str]], *, mode: str, batch_size: int
     ) -> list[FinBERTPrediction]:
         try:
-            import torch
-            from transformers import (
-                AutoModelForSequenceClassification,
-                AutoTokenizer,
-            )
+            torch = importlib.import_module("torch")
+            transformers = importlib.import_module("transformers")
         except ImportError as error:  # pragma: no cover - environment dependent
             raise RuntimeError("Install sentiment-lab[finbert] with a local model cache") from error
-        tokenizer = AutoTokenizer.from_pretrained(  # type: ignore[no-untyped-call]
+        tokenizer = transformers.AutoTokenizer.from_pretrained(
             self.model_identifier, revision=self.tokenizer_revision, local_files_only=True
         )
-        model = AutoModelForSequenceClassification.from_pretrained(
+        model = transformers.AutoModelForSequenceClassification.from_pretrained(
             self.model_identifier, revision=self.model_revision, local_files_only=True
         )
         model.eval()
