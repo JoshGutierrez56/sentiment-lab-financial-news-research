@@ -2,7 +2,7 @@
 
 Date: 2026-07-18
 
-Target: `JoshGutierrez56/DeepSeek-Generative-AI-Sentiment-Analysis-Algorithm`
+Target: `JoshGutierrez56/sentiment-lab-financial-news-research` (renamed from the original DeepSeek-era repository)
 
 Reference: `JoshGutierrez56/Optlab-Research`
 

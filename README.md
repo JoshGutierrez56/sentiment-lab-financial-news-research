@@ -79,8 +79,8 @@ The complete frozen specification is [event_surprise_retrospective.yaml](config/
 Python 3.11 or 3.12 and [uv](https://docs.astral.sh/uv/) are recommended.
 
 ```powershell
-git clone https://github.com/JoshGutierrez56/DeepSeek-Generative-AI-Sentiment-Analysis-Algorithm.git
-cd DeepSeek-Generative-AI-Sentiment-Analysis-Algorithm
+git clone https://github.com/JoshGutierrez56/sentiment-lab-financial-news-research.git
+cd sentiment-lab-financial-news-research
 uv sync --locked --extra dev
 
 uv run --locked ruff format --check .
