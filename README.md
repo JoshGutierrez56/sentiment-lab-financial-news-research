@@ -1,198 +1,149 @@
 # Sentiment Lab
 
-Sentiment Lab is a reproducible EODHD equity-news research platform. It tests
-whether structured OpenAI or local-model interpretation predicts the specified
-company's subsequent return, then evaluates a simple daily portfolio only after
-event-level predictive tests are complete.
+Sentiment Lab is an evidence-first financial-news research pipeline. It joins full-text equity news to point-in-time market data, produces structured model assessments, and evaluates daily portfolios only after timestamps, data lineage, split boundaries, execution rules, and costs have been locked.
 
-## Core execution path
+The main result is negative and intentionally reported that way: **neither generic news sentiment nor the final event-surprise redesign was promoted as a standalone trading strategy.** The repository is useful as a reproducible research and model-risk case study—not as a claim of production alpha.
 
-1. Download and immutably cache EODHD news and adjusted EOD prices.
-2. Before OpenAI, reject out-of-window articles, uncertain ticker mappings,
-   inadequate text, broad market summaries, and duplicate stories.
-3. Keep full text and headline-only records separate; the active configuration
-   excludes headline-only records and always prioritizes full text.
-4. Submit all uncached first-pass requests through the OpenAI Batch API to
-   `/v1/responses` using `gpt-5.4-mini` and a strict structured-output schema.
-5. After that batch is complete, submit a second `gpt-5.4` batch only for
-   low-confidence, high-materiality, contradictory, specified major-event, or
-   invalid-output cases. Pro models are rejected by configuration validation.
-6. Permanently cache each validated result by article-content hash, ticker,
-   model, prompt version, and schema version. Identical work is never submitted
-   twice, including duplicates within one run.
-7. Enter at the first market open strictly after the New York publication date
-   and measure adjusted 1/3/5-trading-day returns.
-8. Write article evidence, accuracy/IC metrics, per-attempt token/cost ledgers,
-   an immutable manifest, DuckDB views, and a self-contained HTML report.
+> Research software only. Nothing in this repository is investment advice or a representation of live trading performance.
 
-The model returns only sentiment score/label, confidence, relevance,
-materiality, novelty, event type, expected horizon, tradable/abstain flags, and
-concise reasoning capped at 40 words. Article identity and timestamps come from
-the trusted local record rather than being echoed by the model.
+## Final results
 
-## Cost controls
+### Frozen 5,000-article study
 
-The fixed system prompt is shared across requests and a stable prompt-cache key
-is supplied. Output is capped at 256 tokens for both models. Published Batch
-rates are versioned in `config/settings.yaml`; every API result records exact
-input, cached-input, output, and reasoning tokens plus estimated USD cost.
+The corpus contains 5,000 unique full-text articles covering 125 U.S. companies across 11 sectors and five years. Sampling was balanced at 40 articles per company. All studies use a chronological 60/20/20 development, validation, and holdout split; conservative next-open entry; adjusted returns; explicit daily portfolio series; and immutable source hashes.
 
-| Run tier | Hard limit |
-|---|---:|
-| Smoke test | $1 |
-| First research sample | $5 |
-| Expanded validation | $20 |
+| Specification | Evaluation | Gross Sharpe | Base-cost net Sharpe | Conservative net Sharpe | Decision |
+|---|---|---:|---:|---:|---|
+| Generic structured sentiment | 5-session holdout portfolio | 1.1396 | 0.0082 | -1.6210 | Not promoted |
+| Generic structured sentiment | 21-session holdout portfolio | -1.9490 | -2.6790 | -3.7360 | Not promoted |
+| Event-surprise redesign | 5-session holdout portfolio | -0.2776 | -0.7014 | -1.1471 | Not promoted |
 
-Before uploading JSONL, the client computes a conservative maximum using one
-input token per UTF-8 request byte, an additional overhead allowance, and the
-full output cap. A batch that cannot fit within the remaining run budget stops
-before upload. Batch state is content-addressed, so an interrupted local run
-resumes the same remote batch instead of resubmitting it.
+The generic five-session signal looked attractive before costs, but its gross contribution was only slightly larger than modeled turnover costs. The event-surprise redesign asked a better economic question—whether news was company-specific, material, novel, and surprising relative to prior information—but it also failed the frozen portfolio gates.
 
-The implementation follows the official [Batch API guide](https://developers.openai.com/api/docs/guides/batch),
-[Structured Outputs guide](https://developers.openai.com/api/docs/guides/structured-outputs),
-[prompt-caching guide](https://developers.openai.com/api/docs/guides/prompt-caching),
-and [pricing page](https://developers.openai.com/api/docs/pricing).
+For the event-surprise holdout:
 
-## Verified milestones
+- 517 company-day events were evaluable;
+- 46 passed the development-fitted 2x round-trip cost hurdle and stateful portfolio rules;
+- event-level five-session Spearman IC was 0.0349;
+- base-cost net return was -0.25% over 66 market sessions;
+- base-cost net Sharpe was -0.7014;
+- the five-session block-bootstrap 95% Sharpe interval was [-2.9615, 3.1299]; and
+- three of six promotion gates failed, including base Sharpe, bootstrap lower bound, and conservative Sharpe.
 
-The 12-article operational smoke test and immutable 250-article OpenAI validation
-are complete. Experiment `20260718T232828Z_70aaf344` contains 250 valid
-classifications, 114 tradable events, a 54.4% abstention rate, and $0.348443 of
-OpenAI cost. It showed positive but still inconclusive 5- and 21-day evidence.
-Its artifacts are preserved unchanged as OpenAI calibration dataset v1.
+Positive event-level IC did not translate into a robust portfolio. That distinction is central to the project: classification quality, predictive association, and deployable performance are different claims.
 
-The next sample was frozen before local inference:
+Read the complete [event-surprise retrospective](docs/EVENT_SURPRISE_RETROSPECTIVE_REPORT.md) and its [machine-readable evidence](docs/evidence/event_surprise_retrospective_summary.json). The earlier generic-sentiment result is documented in the [5,000-article final report](docs/HYBRID_5000_FINAL_REPORT.md) and [artifact closeout](docs/HYBRID_5000_CLOSEOUT.md).
 
-- sample hash `7b07079fb2bcbf7546e1dd810ee081ddb86adb7bb37aa0979efac31fe30553a7`;
-- 5,000 unique full-text articles and syndicated-story clusters;
-- 125 companies at 40 articles each across 11 sectors and five years;
-- 1,788 deterministic earnings/guidance candidates;
-- complete adjusted 1/3/5/10/21/63-session returns; and
-- zero entry-before-publication violations.
+## What this repository demonstrates
 
-The selected local model is `qwen3.6:35b-a3b` Q4_K_M. The exact 60/20/20
-chronological split and all stop gates are locked. See
-[the hybrid methodology](docs/HYBRID_5000_METHODOLOGY.md). The final 5,000-row
-research conclusion is not stated until the local run, additional calibration,
-untouched holdout, baselines, and daily portfolios finish.
+- **Point-in-time alignment:** publication timestamps are converted to New York time and entered at the first eligible adjusted market open after publication.
+- **Immutable data lineage:** article, price, model-output, configuration, and result artifacts are content-addressed and hash-checked.
+- **Strict structured outputs:** model assessments are validated against typed schemas; invalid, ambiguous, or generic records abstain.
+- **Local and hosted model workflows:** an immutable 250-article OpenAI calibration set is preserved; the 5,000-article extraction uses cached Qwen outputs plus pinned FinBERT baselines.
+- **Leakage controls:** chronological splits, outcome-boundary purging, development-only calibration, story deduplication, and one company-day event rule.
+- **Stateful execution:** same-ticker overlap suppression, side and gross exposure caps, volume participation limits, and auditable order/fill/rejection ledgers.
+- **Decomposed costs:** commissions, half-spread, slippage, nonlinear volume impact, short borrow, and a research-cost allocation are reported separately.
+- **Falsifiable promotion gates:** a strategy is closed when it fails rather than retuned on holdout.
+- **Reproducible engineering:** Ruff, strict mypy, a two-version GitHub Actions matrix, and 110 tests with an 85% coverage gate.
 
-## Install
+## Research lineage
 
-Python 3.11 or newer and [uv](https://docs.astral.sh/uv/) are recommended.
+The repository preserves three distinct stages rather than overwriting earlier evidence:
+
+1. **OpenAI calibration (250 articles).** Operational validation and comparison dataset; not large enough for a trading conclusion.
+2. **Generic sentiment study (5,000 articles).** Qwen structured sentiment evaluated against forward returns and explicit daily portfolios. Gross five-session performance did not survive costs.
+3. **Event-surprise redesign (5,000 articles).** Sparse surprise-relative-to-expectations signal, development-only edge calibration, a 2x cost hurdle, purged boundaries, and one frozen stateful retrospective. It was not promoted.
+
+The final redesign did not rewrite the old strategy or tune it until it passed. A pre-canonical verification run did expose a split-boundary implementation defect: the earlier split retained its boundary day while valid terminal-holdout exits were discarded. The runner was mechanically corrected to purge outcomes reaching the next split and retain complete terminal paths. No horizon, signal threshold, weight, cost assumption, model, or promotion gate changed in response to performance.
+
+## Method summary
+
+The primary event-surprise signal is:
+
+```text
+(Qwen direction score - FinBERT score)
+× company specificity
+× materiality
+× novelty
+× confidence
+```
+
+Abstentions are zeroed and excluded from portfolio selection. The strongest absolute qualifying event is selected per company-day with article ID as the deterministic tie-break. A no-intercept slope is fitted on purged development observations only, then used to estimate dollar edge for the fixed five-session portfolio. Validation and holdout outcomes do not set the threshold or calibrator.
+
+The portfolio uses $1 million starting capital, 2% maximum event sleeves, 50% per-side caps, 100% maximum gross exposure, 1% maximum volume participation, no same-ticker overlap, and no rebalance between entry and exit. Inactive market sessions remain in the daily series as zero-return cash days.
+
+The complete frozen specification is [event_surprise_retrospective.yaml](config/experiments/event_surprise_retrospective.yaml).
+
+## Install and validate
+
+Python 3.11 or 3.12 and [uv](https://docs.astral.sh/uv/) are recommended.
 
 ```powershell
 git clone https://github.com/JoshGutierrez56/DeepSeek-Generative-AI-Sentiment-Analysis-Algorithm.git
 cd DeepSeek-Generative-AI-Sentiment-Analysis-Algorithm
-git switch agent/openai-eodhd-rebuild
-uv sync --extra dev
-Copy-Item .env.example .env
+uv sync --locked --extra dev
+
+uv run --locked ruff format --check .
+uv run --locked ruff check .
+uv run --locked mypy src/sentiment_lab
+uv run --locked pytest
+uv build
 ```
 
-Populate the untracked `.env` without pasting credentials into chat:
+The core test suite does not require API credentials, proprietary news data, Ollama, or a GPU.
 
-```dotenv
-EODHD_API_TOKEN=...
-OPENAI_API_KEY=...
-DATA_ROOT=./data
-DUCKDB_PATH=./data/research.duckdb
-LOG_LEVEL=INFO
-```
+## Reproduce the frozen retrospective
 
-The first-pass and escalation models live in validated YAML, not environment
-variables. The defaults are `gpt-5.4-mini` and `gpt-5.4`.
-
-## Run the smoke milestone
-
-Reuse the cached provider responses and inspect all filter counts:
+Large and licensed research artifacts are intentionally excluded from Git. To reproduce the canonical portfolio, place the three frozen Parquets at the paths declared in the configuration or rebuild them from your own authorized EODHD data and local model cache. The runner refuses any input whose SHA-256 does not match the frozen specification.
 
 ```powershell
-uv run sentiment-lab data sync --config config/experiments/milestone.yaml
+uv run --locked python tools/run_event_surprise_retrospective.py
 ```
 
-Run the complete cost-bounded Batch workflow after configuring the OpenAI key:
+The command is cache-only and makes no network, OpenAI, Ollama, CUDA, or EODHD calls. It writes an immutable directory keyed by configuration hash containing:
 
-```powershell
-uv run sentiment-lab milestone run --config config/experiments/milestone.yaml
-```
+- `predictions.parquet`
+- `orders.parquet`
+- `fills.parquet`
+- `rejected_orders.parquet`
+- `positions.parquet`
+- `daily_returns.parquet`
+- `cost_breakdown.parquet`
+- `metrics.json`
+- `manifest.json`
+- `report.html`
 
-Do not add `--refresh` to a reproducibility rerun. EODHD and permanent OpenAI
-caches are reused automatically; there is intentionally no force-reclassify
-option.
+Canonical configuration SHA-256: `3b45aad9a1774ad53d5f325185b66a13012a2a1296ceffe8f9850396480bffc0`.
 
-## Run the locked hybrid study
+## Repository map
 
-The hybrid commands consume strict, hash-locked YAML. A completed local cache is
-always resumed; there is no force-reclassify switch.
+| Path | Purpose |
+|---|---|
+| `src/sentiment_lab/event_surprise/` | Strict event schema, signal construction, frozen portfolio retrospective |
+| `src/sentiment_lab/execution/` | Stateful execution and decomposed cost models |
+| `src/sentiment_lab/hybrid/` | Sampling, local inference, calibration, baselines, portfolios, and reporting |
+| `src/sentiment_lab/validation/` | Purged walk-forward validation primitives |
+| `config/experiments/` | Hash-locked experiment and promotion specifications |
+| `tools/` | Cache-only inference repair, closeout, and final retrospective runners |
+| `tests/` | Unit and integration tests, including leakage and accounting invariants |
+| `docs/` | Methodology, model benchmark, closeouts, audits, and final reports |
 
-```powershell
-uv run sentiment-lab hybrid sample-sync --config config/experiments/hybrid_5000.yaml
-uv run sentiment-lab hybrid local-run --config config/experiments/hybrid_local_5000.yaml
-uv run sentiment-lab hybrid splits-freeze `
-  --articles data/normalized/hybrid_5000/7b07079fb2bcbf7546e1dd810ee081ddb86adb7bb37aa0979efac31fe30553a7/articles.parquet `
-  --sample-hash 7b07079fb2bcbf7546e1dd810ee081ddb86adb7bb37aa0979efac31fe30553a7 `
-  --output-root data/normalized/hybrid_5000/7b07079fb2bcbf7546e1dd810ee081ddb86adb7bb37aa0979efac31fe30553a7
-uv run sentiment-lab hybrid prediction-run --config config/experiments/hybrid_prediction_devval.yaml
-uv run sentiment-lab hybrid spec-freeze --config config/experiments/hybrid_specification.yaml
-uv run sentiment-lab hybrid calibration-select --config config/experiments/hybrid_calibration_select.yaml
-uv run sentiment-lab hybrid calibration-run --config config/experiments/hybrid_calibration_run.yaml
-uv run sentiment-lab hybrid calibration-analyze --config config/experiments/hybrid_calibration_analysis.yaml
-uv run sentiment-lab hybrid prediction-run --config config/experiments/hybrid_prediction_holdout.yaml
-uv run sentiment-lab hybrid baselines-run --config config/experiments/hybrid_baselines_holdout.yaml
-uv run sentiment-lab hybrid portfolio-run --config config/experiments/hybrid_portfolio_holdout.yaml
-uv run sentiment-lab hybrid report-build --config config/experiments/hybrid_final_report.yaml
-```
+## Evidence and limitations
 
-The downstream YAML files contain immutable input hashes produced by earlier
-steps. Create or verify the split artifact before prediction analysis. Holdout
-commands fail closed until the primary specification is frozen.
+The canonical retrospective manifest records implementation commit `ca9c8ae67d3c93b4bdc402530f00e000940962c0`, a clean worktree, the random seed, platform, exact input hashes, and SHA-256 for every canonical output Parquet.
 
-Each completed result directory contains:
+Important limitations remain:
 
-- `articles.parquet` — provider text, timestamps, symbols, provider sentiment,
-  raw-response hash, and full-text/headline-only type.
-- `assessments.parquet` — the final structured assessment, model/stage,
-  prompt/schema/cache hashes, tokens, and estimated historical classification
-  cost.
-- `classification_ledger.parquet` — every mini/escalation/cache attempt with
-  exact usage, estimated cost, current-run cost, batch IDs, and failure reason.
-- `events.parquet` — article, final assessment, conservative entry, and future
-  adjusted returns.
-- `metrics.json` — coverage, directional accuracy, Spearman IC, Pearson
-  correlation, confidence-weighted IC, and per-label returns.
-- `manifest.json` — git/config/data/artifact hashes, filter counts, Batch IDs,
-  requested/returned models, budget ceiling, exact run usage/cost, and metrics.
-- `report.html` — compact evidence, filter, classification, cost, and return
-  tables.
+- holdout event-level IC was viewed before the final portfolio specification, so the result is a transparent one-shot retrospective rather than a pristine confirmatory test;
+- the balanced sample is not a production universe or capacity estimate;
+- end-of-day data cannot represent intraday latency, queue position, or realized spreads;
+- historical locate availability was unavailable, so shorts are assumed locatable while borrow is modeled;
+- model output is not ground truth, and hash validation proves lineage rather than semantic correctness; and
+- even a passed retrospective would require prospective validation before any alpha or deployability claim.
 
-## Validate
+## Development disclosure
 
-```powershell
-uv run ruff format --check .
-uv run ruff check .
-uv run mypy src/sentiment_lab
-uv run pytest
-```
-
-## Timing and interpretation
-
-The active policy is `conservative_next_day_open`: ignore the publication's
-local market date, enter at 09:30 New York time on the first later EODHD trading
-date, and back-adjust the raw open using that session's close adjustment factor.
-The engine rejects identity/timestamp mismatches and proves the entry is after
-the article.
-
-Directional accuracy maps returns within +/-10 bps to neutral. IC is Spearman
-correlation between the continuous score and future return. Abstained rows stay
-in evidence artifacts but are excluded from accuracy and IC.
-
-A 12-article, one-ticker smoke sample cannot establish significance. The hybrid
-study uses company/date clustering, block bootstrap, simple baselines, explicit
-costs, and an untouched chronological holdout. Event-level returns are never
-reported with a Sharpe ratio; Sharpe is reserved for explicit daily portfolio
-series.
-See [milestone status](docs/MILESTONE_STATUS.md), [repository audit](docs/REPOSITORY_AUDIT.md),
-and [implementation plan](docs/IMPLEMENTATION_PLAN.md).
+The research questions, economic constraints, validation standard, and project direction were set by Josh Gutierrez. AI coding agents generated substantial portions of the implementation under those specifications. The repository therefore emphasizes inspectable source, tests, immutable artifacts, explicit failure gates, and reproducible evidence rather than claiming unaided authorship.
 
 ## License
 

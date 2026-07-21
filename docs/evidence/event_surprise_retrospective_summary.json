@@ -1,0 +1,220 @@
+{
+  "canonical_run": "data/results/event_surprise_retrospective/3b45aad9a1774ad5",
+  "configuration_hash": "3b45aad9a1774ad53d5f325185b66a13012a2a1296ceffe8f9850396480bffc0",
+  "data_hashes": {
+    "articles": "8ada422fcdefa894c55ae51400e073f97fa6d8e26272cde98d8926ce27b68385",
+    "prices": "4f030c49deea3dd536dcb4d06f3b41d8447492ebfae2370d3646bb615ce79615",
+    "signals": "9388d59a609fcbef9e5b9cb91bfdfcdccd5fffa71ad424c9b76f9ebfd47efdf5"
+  },
+  "metrics": {
+    "all_promotion_gates_passed": false,
+    "development_edge_slope": 0.008827079960387847,
+    "holdout_disclosure": "Holdout event-level IC had been viewed before this portfolio specification was frozen; this is a one-shot final retrospective, not a pristine confirmatory test.",
+    "implementation_audit": "A pre-canonical verification run exposed split-boundary handling that retained an earlier split's boundary day and discarded valid terminal-holdout exits. The runner was corrected to purge outcomes reaching the next split and retain terminal holdout paths. No horizon, signal threshold, weight, cost, gate, or model was changed.",
+    "interpretation": "The event-surprise strategy failed at least one predeclared promotion gate.",
+    "promotion_gates": {
+      "maximum_single_ticker_absolute_pnl_share": true,
+      "minimum_holdout_base_net_sharpe": false,
+      "minimum_holdout_bootstrap_ci_lower": false,
+      "minimum_holdout_conservative_net_sharpe": false,
+      "minimum_holdout_trades": true,
+      "positive_validation_base_net_return": true
+    },
+    "selection_counts": {
+      "accepted_trades": 247,
+      "article_rows": 5000,
+      "purged_development_edge_fit_events": 1913,
+      "qualifying_company_day_events": 3105,
+      "rejections": [
+        {
+          "len": 2713,
+          "reason": "insufficient_cost_buffer"
+        },
+        {
+          "len": 84,
+          "reason": "same_ticker_overlap"
+        },
+        {
+          "len": 61,
+          "reason": "split_boundary"
+        }
+      ]
+    },
+    "specification": {
+      "annualization_sessions": 252,
+      "base": {
+        "annual_short_borrow_rate": 0.03,
+        "commission_minimum_usd": 1.0,
+        "commission_per_share_usd": 0.005,
+        "half_spread_bps_per_side": 5.0,
+        "market_impact_coefficient": 0.1,
+        "slippage_bps_per_side": 2.0
+      },
+      "bootstrap_block_length_sessions": 5,
+      "bootstrap_iterations": 2000,
+      "conservative": {
+        "annual_short_borrow_rate": 0.08,
+        "commission_minimum_usd": 1.0,
+        "commission_per_share_usd": 0.005,
+        "half_spread_bps_per_side": 10.0,
+        "market_impact_coefficient": 0.2,
+        "slippage_bps_per_side": 5.0
+      },
+      "cost_safety_multiple": 2.0,
+      "diagnostic_splits": [
+        "development",
+        "validation"
+      ],
+      "edge_target_column": "future_return_5d",
+      "gates": {
+        "maximum_single_ticker_absolute_pnl_share": 0.2,
+        "minimum_holdout_base_net_sharpe": 0.75,
+        "minimum_holdout_bootstrap_ci_lower": 0.0,
+        "minimum_holdout_conservative_net_sharpe": 0.0,
+        "minimum_holdout_trades": 30,
+        "require_positive_validation_base_net_return": true
+      },
+      "holding_sessions": 5,
+      "maximum_gross_exposure": 1.0,
+      "maximum_long_exposure": 0.5,
+      "maximum_short_exposure": 0.5,
+      "maximum_volume_participation": 0.01,
+      "minimum_absolute_signal": 0.0,
+      "position_weight": 0.02,
+      "primary_split": "holdout",
+      "random_seed": 20260721,
+      "research_cost_per_entry_usd": 0.02,
+      "signal_column": "event_surprise_signal",
+      "starting_capital_usd": 1000000.0
+    },
+    "splits": {
+      "development": {
+        "accepted_trades": 160,
+        "average_daily_turnover": 0.008552688107923326,
+        "base_cost_usd": 5210.94466177515,
+        "base_net": {
+          "annualized_return": 0.005697815466415002,
+          "annualized_volatility": 0.0058232193822871,
+          "maximum_drawdown": -0.006613335074972526,
+          "sessions": 752,
+          "sharpe": 0.9784648477689941,
+          "total_return": 0.017096793261725196
+        },
+        "base_net_sharpe_block_bootstrap_95pct": {
+          "lower": -0.29884914177273464,
+          "upper": 2.2499109556839265
+        },
+        "candidate_events": 1927,
+        "conservative_cost_usd": 10876.7134711104,
+        "conservative_net": {
+          "annualized_return": 0.003799180173925001,
+          "annualized_volatility": 0.005821375823986634,
+          "maximum_drawdown": -0.006833836790805292,
+          "sessions": 752,
+          "sharpe": 0.6526258205613017,
+          "total_return": 0.011350590514213055
+        },
+        "evaluation_events": 1913,
+        "event_signal_spearman_5d": 0.041855940861808806,
+        "gross": {
+          "annualized_return": 0.007444036283924762,
+          "annualized_volatility": 0.005830537865576308,
+          "maximum_drawdown": -0.0064026789124830286,
+          "sessions": 752,
+          "sharpe": 1.2767323453766768,
+          "total_return": 0.02241039440512571
+        },
+        "long_trades": 134,
+        "maximum_absolute_net_exposure": 0.12287235974495951,
+        "maximum_gross_exposure": 0.16343656440495746,
+        "short_trades": 26,
+        "single_ticker_absolute_pnl_share": 0.07405347881827735
+      },
+      "holdout": {
+        "accepted_trades": 46,
+        "average_daily_turnover": 0.02783177829026001,
+        "base_cost_usd": 1536.2592795776698,
+        "base_net": {
+          "annualized_return": -0.009589273932455466,
+          "annualized_volatility": 0.013670724848659612,
+          "maximum_drawdown": -0.006590974336096345,
+          "sessions": 66,
+          "sharpe": -0.7014459027310229,
+          "total_return": -0.0025324502921023617
+        },
+        "base_net_sharpe_block_bootstrap_95pct": {
+          "lower": -2.9615079583722475,
+          "upper": 3.12991263221524
+        },
+        "candidate_events": 517,
+        "conservative_cost_usd": 3223.717062532793,
+        "conservative_net": {
+          "annualized_return": -0.01603229455828412,
+          "annualized_volatility": 0.01397581807766068,
+          "maximum_drawdown": -0.007618479976218562,
+          "sessions": 66,
+          "sharpe": -1.1471453384121082,
+          "total_return": -0.00421539064653309
+        },
+        "evaluation_events": 517,
+        "event_signal_spearman_5d": 0.034893794171379534,
+        "gross": {
+          "annualized_return": -0.0037235566831589142,
+          "annualized_volatility": 0.01341516009898627,
+          "maximum_drawdown": -0.005653822973250011,
+          "sessions": 66,
+          "sharpe": -0.27756334294066975,
+          "total_return": -0.0009979657675678322
+        },
+        "long_trades": 35,
+        "maximum_absolute_net_exposure": 0.3172877886560765,
+        "maximum_gross_exposure": 0.47853420915898653,
+        "short_trades": 11,
+        "single_ticker_absolute_pnl_share": 0.12289090796513916
+      },
+      "validation": {
+        "accepted_trades": 41,
+        "average_daily_turnover": 0.006551110939777968,
+        "base_cost_usd": 1352.2987149243672,
+        "base_net": {
+          "annualized_return": 0.0002455656638217643,
+          "annualized_volatility": 0.004384394297689722,
+          "maximum_drawdown": -0.0055746395834905815,
+          "sessions": 250,
+          "sharpe": 0.05600902819145641,
+          "total_return": 0.0002341455031242834
+        },
+        "base_net_sharpe_block_bootstrap_95pct": {
+          "lower": -2.0317306885104642,
+          "upper": 2.499888757431925
+        },
+        "candidate_events": 661,
+        "conservative_cost_usd": 2859.522514502632,
+        "conservative_net": {
+          "annualized_return": -0.0012737159261531263,
+          "annualized_volatility": 0.004362888235435977,
+          "maximum_drawdown": -0.006307472505660883,
+          "sessions": 250,
+          "sharpe": -0.2919432855987075,
+          "total_return": -0.0012722062766724607
+        },
+        "evaluation_events": 614,
+        "event_signal_spearman_5d": -0.017781856549216806,
+        "gross": {
+          "annualized_return": 0.001608682768465527,
+          "annualized_volatility": 0.004412115325344669,
+          "maximum_drawdown": -0.005079123753141013,
+          "sessions": 250,
+          "sharpe": 0.36460578426513796,
+          "total_return": 0.001587550535804061
+        },
+        "long_trades": 31,
+        "maximum_absolute_net_exposure": 0.060215339158483955,
+        "maximum_gross_exposure": 0.16246771816896183,
+        "short_trades": 10,
+        "single_ticker_absolute_pnl_share": 0.1365775965847459
+      }
+    },
+    "status": "not_promoted"
+  }
+}
