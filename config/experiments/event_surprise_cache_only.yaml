@@ -1,0 +1,24 @@
+dataset:
+  source: frozen_hybrid_5000_cache
+  new_collection: false
+feature_generation:
+  event_schema: strict_v1
+  deduplicate_story_clusters: true
+model:
+  finbert: ProsusAI/finbert
+  local_finance_model: cache_only_unconfigured
+  allow_inference: false
+signal:
+  primary: calibrated_llm_score_minus_finbert_score_x_specificity_x_materiality_x_novelty_x_confidence
+validation:
+  method: purged_walk_forward
+  horizons: [1, 5, 21]
+  embargo_sessions: 21
+execution:
+  timing: next_open
+costs:
+  cost_safety_multiple: 2.0
+portfolio:
+  one_primary_signal_per_company_day: true
+reporting:
+  exploratory: true

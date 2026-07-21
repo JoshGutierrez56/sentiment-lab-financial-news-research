@@ -25,9 +25,7 @@ def _write_inputs(root: Path, *, holdout: bool = False) -> dict[str, Path]:
             "sector": ["Technology", "Financials"] * 6,
             "entry_date": [date(2024, 1, index + 1) for index in range(12)],
             **{
-                f"exit_date_{horizon}d": [
-                    date(2024, 1, index + 1) for index in range(12)
-                ]
+                f"exit_date_{horizon}d": [date(2024, 1, index + 1) for index in range(12)]
                 for horizon in (1, 3, 5, 10, 21, 63)
             },
             **{
@@ -62,8 +60,7 @@ def _write_inputs(root: Path, *, holdout: bool = False) -> dict[str, Path]:
         {
             "article_id": ids,
             "research_split": [
-                "holdout" if holdout and index == 11 else "development"
-                for index in range(12)
+                "holdout" if holdout and index == 11 else "development" for index in range(12)
             ],
         }
     ).write_parquet(paths["splits"])

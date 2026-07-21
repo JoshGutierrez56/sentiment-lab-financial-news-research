@@ -603,18 +603,13 @@ def validation_decision(metrics: dict[str, Any]) -> tuple[str, str]:
     evidence_horizons = [key for key in ("5d", "21d") if key in horizons]
     useful_evidence = any(
         (horizons[key]["weighted_signal"]["spearman_ic"] or 0.0) > 0.0
-        and (
-            horizons[key]["company_cluster_bootstrap_95_ci"]["lower_95"] or 0.0
-        )
-        > 0.0
+        and (horizons[key]["company_cluster_bootstrap_95_ci"]["lower_95"] or 0.0) > 0.0
         for key in evidence_horizons
     )
     if not useful_evidence:
         return "STOP", "No positive medium-horizon weighted IC with a positive company-level CI."
     other_rows = [row for row in metrics["by_event_type"] if row["event_type"] == "other"]
-    other_share = (
-        other_rows[0]["n"] / metrics["valid_classification_count"] if other_rows else 0.0
-    )
+    other_share = other_rows[0]["n"] / metrics["valid_classification_count"] if other_rows else 0.0
     if (metrics["abstention_rate"] or 0.0) > 0.50 or other_share > 0.50:
         return (
             "REVISE",

@@ -79,4 +79,3 @@ class LocalArticleAssessment(BaseModel):
         if not self.abstain and self.abstain_reason is not None:
             raise ValueError("tradable assessments cannot have abstain_reason")
         return self
-

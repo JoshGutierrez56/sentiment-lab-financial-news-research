@@ -28,6 +28,10 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+finbert = [
+  "torch>=2.4,<3",
+  "transformers>=4.44,<5",
+]
 dev = [
   "mypy>=1.12,<2",
   "pytest>=8.3,<9",

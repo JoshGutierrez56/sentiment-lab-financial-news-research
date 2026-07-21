@@ -86,7 +86,9 @@ def _lagged_price_features(prices: pl.DataFrame) -> pl.DataFrame:
                 - 1.0
             ).alias("short_term_reversal_5d"),
         )
-        .select("ticker", pl.col("date").alias("entry_date"), "momentum_21d", "short_term_reversal_5d")
+        .select(
+            "ticker", pl.col("date").alias("entry_date"), "momentum_21d", "short_term_reversal_5d"
+        )
     )
 
 
@@ -116,8 +118,7 @@ def _metrics(signal: np.ndarray, returns: np.ndarray) -> dict[str, Any]:
         "directional_accuracy": (
             float(
                 np.mean(
-                    np.sign(selected_signal[directional])
-                    == np.sign(selected_returns[directional])
+                    np.sign(selected_signal[directional]) == np.sign(selected_returns[directional])
                 )
             )
             if np.any(directional)
@@ -244,13 +245,10 @@ def run_baselines(
         results["splits"][split] = {}
         for horizon in HORIZONS:
             selected_horizon = _purge_overlapping_split_returns(selected, horizon)
-            development_horizon = _purge_overlapping_split_returns(
-                development, horizon
-            )
+            development_horizon = _purge_overlapping_split_returns(development, horizon)
             returns = selected_horizon[f"future_return_{horizon}d"].to_numpy().astype(float)
-            event_means = (
-                development_horizon.group_by("event_type")
-                .agg(pl.col(f"future_return_{horizon}d").mean().alias("event_type_signal"))
+            event_means = development_horizon.group_by("event_type").agg(
+                pl.col(f"future_return_{horizon}d").mean().alias("event_type_signal")
             )
             evaluated = selected_horizon.join(
                 event_means, on="event_type", how="left"

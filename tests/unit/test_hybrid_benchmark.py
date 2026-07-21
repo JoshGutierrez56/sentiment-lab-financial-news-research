@@ -180,4 +180,3 @@ def test_selection_config_rejects_nonunit_weights() -> None:
         assert "sum to 1.0" in str(exc)
     else:  # pragma: no cover
         raise AssertionError("invalid weights were accepted")
-

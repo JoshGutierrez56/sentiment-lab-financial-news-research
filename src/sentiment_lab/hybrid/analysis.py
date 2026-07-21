@@ -179,9 +179,7 @@ def _horizon_metrics(
     seed: int,
 ) -> dict[str, Any]:
     usable = frame.filter(
-        pl.col("tradable")
-        & ~pl.col("abstain")
-        & pl.col(f"future_return_{horizon}d").is_not_null()
+        pl.col("tradable") & ~pl.col("abstain") & pl.col(f"future_return_{horizon}d").is_not_null()
     )
     returns = usable[f"future_return_{horizon}d"].to_numpy().astype(float)
     signal = usable[signal_column].to_numpy().astype(float)
@@ -214,9 +212,7 @@ def _horizon_metrics(
         ),
         "returns_by_sentiment": by_label,
         "bullish_minus_bearish_spread": (
-            float(np.mean(bullish) - np.mean(bearish))
-            if len(bullish) and len(bearish)
-            else None
+            float(np.mean(bullish) - np.mean(bearish)) if len(bullish) and len(bearish) else None
         ),
         **_corr(signal, returns),
         "average_signed_return": float(np.mean(signed)) if len(signed) else None,
@@ -254,22 +250,16 @@ def _purge_overlapping_split_returns(frame: pl.DataFrame, horizon: int) -> pl.Da
     """Exclude outcomes whose measurement window reaches the next split."""
 
     boundary = pl.col("next_split_entry_date")
-    return frame.filter(
-        boundary.is_null() | (pl.col(f"exit_date_{horizon}d") < boundary)
-    )
+    return frame.filter(boundary.is_null() | (pl.col(f"exit_date_{horizon}d") < boundary))
 
 
 def _add_signals(frame: pl.DataFrame) -> pl.DataFrame:
     return frame.with_columns(
         pl.col("sentiment_score").alias("raw_sentiment"),
-        (pl.col("sentiment_score") * pl.col("confidence")).alias(
-            "sentiment_confidence"
+        (pl.col("sentiment_score") * pl.col("confidence")).alias("sentiment_confidence"),
+        (pl.col("sentiment_score") * pl.col("confidence") * pl.col("materiality")).alias(
+            "sentiment_confidence_materiality"
         ),
-        (
-            pl.col("sentiment_score")
-            * pl.col("confidence")
-            * pl.col("materiality")
-        ).alias("sentiment_confidence_materiality"),
         (
             pl.col("sentiment_score")
             * pl.col("confidence")
@@ -283,9 +273,7 @@ def _company_day(frame: pl.DataFrame, *, strongest: bool) -> pl.DataFrame:
     if strongest:
         return (
             frame.with_columns(
-                pl.col("sentiment_confidence_materiality")
-                .abs()
-                .alias("_absolute_strength")
+                pl.col("sentiment_confidence_materiality").abs().alias("_absolute_strength")
             )
             .sort("_absolute_strength", descending=True, nulls_last=True)
             .group_by(["research_split", "ticker", "entry_date"], maintain_order=True)
@@ -308,9 +296,9 @@ def _company_day(frame: pl.DataFrame, *, strongest: bool) -> pl.DataFrame:
             *[pl.col(f"future_return_{horizon}d").first() for horizon in HORIZONS],
         ]
     )
-    grouped = frame.group_by(
-        ["research_split", "ticker", "entry_date"], maintain_order=True
-    ).agg(aggregations)
+    grouped = frame.group_by(["research_split", "ticker", "entry_date"], maintain_order=True).agg(
+        aggregations
+    )
     return grouped.with_columns(
         pl.when(pl.col("raw_sentiment") > 0.25)
         .then(pl.lit("bullish"))
@@ -319,6 +307,35 @@ def _company_day(frame: pl.DataFrame, *, strongest: bool) -> pl.DataFrame:
         .otherwise(pl.lit("neutral"))
         .alias("sentiment_label")
     )
+
+
+def _frozen_primary_frame(frame: pl.DataFrame, specification: dict[str, Any]) -> pl.DataFrame:
+    """Apply the exact primary thresholds and aggregation frozen pre-holdout."""
+
+    signal = str(specification["signal"])
+    aggregation = str(specification["aggregation"])
+    if signal not in SIGNALS:
+        raise RuntimeError(f"Unknown frozen primary signal: {signal}")
+    eligible = frame.filter(
+        pl.col("tradable")
+        & ~pl.col("abstain")
+        & (pl.col("confidence") >= float(specification["minimum_confidence"]))
+        & (pl.col("relevance") >= float(specification["minimum_relevance"]))
+        & (pl.col("materiality") >= float(specification["minimum_materiality"]))
+    )
+    if aggregation == "event_level":
+        return eligible
+    if aggregation == "strongest_company_day":
+        return (
+            eligible.with_columns(pl.col(signal).abs().alias("_absolute_strength"))
+            .sort("_absolute_strength", descending=True, nulls_last=True)
+            .group_by(["research_split", "ticker", "entry_date"], maintain_order=True)
+            .first()
+            .drop("_absolute_strength")
+        )
+    if aggregation == "company_day_aggregate":
+        return _company_day(eligible, strongest=False)
+    raise RuntimeError(f"Unknown frozen primary aggregation: {aggregation}")
 
 
 def _breakdown(frame: pl.DataFrame, group: str) -> list[dict[str, Any]]:
@@ -331,10 +348,7 @@ def _breakdown(frame: pl.DataFrame, group: str) -> list[dict[str, Any]]:
             [
                 eligible.cast(pl.Int64).sum().alias(f"eligible_{horizon}d"),
                 pl.when(eligible)
-                .then(
-                    pl.col("sentiment_score").sign()
-                    * pl.col(f"future_return_{horizon}d")
-                )
+                .then(pl.col("sentiment_score").sign() * pl.col(f"future_return_{horizon}d"))
                 .otherwise(None)
                 .mean()
                 .alias(f"average_signed_return_{horizon}d"),
@@ -370,15 +384,19 @@ def run_prediction_analysis(
     for path, digest in expected.items():
         if file_sha256(path) != digest:
             raise RuntimeError(f"Immutable analysis input hash mismatch: {path}")
+    primary_specification: dict[str, Any] | None = None
     if "holdout" in config.included_splits:
         assert config.primary_specification_manifest is not None
-        specification = json.loads(
+        specification_manifest = json.loads(
             config.primary_specification_manifest.read_text(encoding="utf-8")
         )
-        if specification.get("frozen_before_holdout") is not True:
+        if specification_manifest.get("frozen_before_holdout") is not True:
             raise RuntimeError("Primary specification was not frozen before holdout access")
-        if specification.get("sample_hash") != config.expected_sample_hash:
+        if specification_manifest.get("sample_hash") != config.expected_sample_hash:
             raise RuntimeError("Primary specification sample hash mismatch")
+        primary_specification = specification_manifest.get("selected_predictive_specification")
+        if not isinstance(primary_specification, dict):
+            raise RuntimeError("Frozen primary specification is missing")
 
     article_columns = [
         "article_id",
@@ -396,9 +414,9 @@ def run_prediction_analysis(
     splits = pl.read_parquet(config.splits_path, columns=["article_id", "research_split"])
     if articles.height != 5000 or classifications.height != 5000 or splits.height != 5000:
         raise RuntimeError("Prediction inputs must each contain exactly 5,000 rows")
-    joined = articles.join(
-        classifications, on=["article_id", "ticker"], validate="1:1"
-    ).join(splits, on="article_id", validate="1:1")
+    joined = articles.join(classifications, on=["article_id", "ticker"], validate="1:1").join(
+        splits, on="article_id", validate="1:1"
+    )
     split_minimums = {
         split: joined.filter(pl.col("research_split") == split)["entry_date"].min()
         for split in ("development", "validation", "holdout")
@@ -412,9 +430,7 @@ def run_prediction_analysis(
         .alias("next_split_entry_date")
     )
     frame = _add_signals(
-        joined
-        .filter(pl.col("research_split").is_in(config.included_splits))
-        .with_columns(
+        joined.filter(pl.col("research_split").is_in(config.included_splits)).with_columns(
             pl.col("provider_timestamp").dt.year().alias("year"),
             pl.when(pl.col("confidence") < 0.50)
             .then(pl.lit("[0.00,0.50)"))
@@ -460,9 +476,7 @@ def run_prediction_analysis(
         },
         "breakdowns": {
             split: {
-                group: _breakdown(
-                    frame.filter(pl.col("research_split") == split), group
-                )
+                group: _breakdown(frame.filter(pl.col("research_split") == split), group)
                 for group in (
                     "year",
                     "sector",
@@ -476,6 +490,23 @@ def run_prediction_analysis(
         },
         "excluding_other": {},
     }
+    if primary_specification is not None:
+        frozen_frame = _frozen_primary_frame(frame, primary_specification)
+        signal = str(primary_specification["signal"])
+        metrics["frozen_primary_specification"] = {
+            "specification": primary_specification,
+            "holdout": {
+                f"{horizon}d": _horizon_metrics(
+                    _purge_overlapping_split_returns(frozen_frame, horizon),
+                    signal_column=signal,
+                    horizon=horizon,
+                    threshold=threshold,
+                    bootstrap_samples=config.bootstrap_samples,
+                    seed=config.random_seed + 20_000 + horizon,
+                )
+                for horizon in HORIZONS
+            },
+        }
     representations = {
         "event_level": frame,
         "strongest_company_day": _company_day(frame, strongest=True),
@@ -512,9 +543,7 @@ def run_prediction_analysis(
             for horizon in HORIZONS
         }
 
-    config_hash = hashlib.sha256(
-        stable_json(config.model_dump(mode="json")).encode()
-    ).hexdigest()
+    config_hash = hashlib.sha256(stable_json(config.model_dump(mode="json")).encode()).hexdigest()
     root = data_root / "results" / f"prediction_{config_hash[:16]}"
     store = ArtifactStore(data_root, duckdb_path)
     events_path = store.write_parquet(frame, root / "events.parquet")

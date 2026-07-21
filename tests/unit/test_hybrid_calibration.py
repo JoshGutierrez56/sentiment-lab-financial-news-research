@@ -75,9 +75,7 @@ def _write_sources(root: Path) -> CalibrationRegistryEntry:
         data_snapshot_id="0123456789abcdef",
         prompt_version="evidence_v2.1.0-cost",
         schema_version="article_assessment.v2",
-        source_artifacts={
-            name: file_sha256(experiment / name) for name in paths
-        },
+        source_artifacts={name: file_sha256(experiment / name) for name in paths},
     )
 
 
@@ -96,6 +94,4 @@ def test_register_calibration_is_reproducible_and_refuses_source_drift(tmp_path:
     source = tmp_path / "results" / "exp1" / "articles.parquet"
     source.write_bytes(source.read_bytes() + b"drift")
     with pytest.raises(RuntimeError, match="source drift"):
-        register_calibration_v1(
-            entry, data_root=tmp_path, duckdb_path=tmp_path / "research.duckdb"
-        )
+        register_calibration_v1(entry, data_root=tmp_path, duckdb_path=tmp_path / "research.duckdb")

@@ -34,7 +34,11 @@ from sentiment_lab.hybrid.calibration_analysis import (
     CalibrationAnalysisConfig,
     run_calibration_analysis,
 )
-from sentiment_lab.hybrid.classification import HybridLocalRunConfig, run_local_classification
+from sentiment_lab.hybrid.classification import (
+    HybridLocalRunConfig,
+    rebuild_local_classifications_from_cache,
+    run_local_classification,
+)
 from sentiment_lab.hybrid.final_report import FinalReportConfig, build_final_report
 from sentiment_lab.hybrid.openai_calibration import (
     AdditionalCalibrationConfig,
@@ -353,6 +357,26 @@ def hybrid_local_run(
     app_config = load_app_config(settings, secrets=runtime)
     try:
         output = run_local_classification(
+            _yaml_config(config, HybridLocalRunConfig),
+            data_root=app_config.storage.data_root,
+            duckdb_path=app_config.storage.duckdb_path,
+        )
+    except (RuntimeError, ValueError) as exc:
+        _fail(str(exc))
+    typer.echo(str(output))
+
+
+@hybrid_app.command("local-rebuild-cache")
+def hybrid_local_rebuild_cache(
+    config: Annotated[Path, typer.Option(exists=True, readable=True)],
+    settings: Annotated[Path, typer.Option(exists=True)] = Path("config/settings.yaml"),
+) -> None:
+    """Canonically rebuild local classifications from permanent cache without inference."""
+
+    runtime = RuntimeSecrets()
+    app_config = load_app_config(settings, secrets=runtime)
+    try:
+        output = rebuild_local_classifications_from_cache(
             _yaml_config(config, HybridLocalRunConfig),
             data_root=app_config.storage.data_root,
             duckdb_path=app_config.storage.duckdb_path,

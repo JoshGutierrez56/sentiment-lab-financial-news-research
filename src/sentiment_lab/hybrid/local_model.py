@@ -246,9 +246,7 @@ class OllamaStructuredClient:
             totals["output_tokens"] += int(payload.get("eval_count", 0))
             totals["total_duration_ns"] += int(payload.get("total_duration", 0))
             totals["load_duration_ns"] += int(payload.get("load_duration", 0))
-            totals["prompt_eval_duration_ns"] += int(
-                payload.get("prompt_eval_duration", 0)
-            )
+            totals["prompt_eval_duration_ns"] += int(payload.get("prompt_eval_duration", 0))
             totals["eval_duration_ns"] += int(payload.get("eval_duration", 0))
             try:
                 assessment = LocalArticleAssessment.model_validate_json(content)
@@ -283,9 +281,7 @@ class OllamaStructuredClient:
         record = LocalClassificationRecord(
             cache_key=key,
             article_id=target.article.article_id,
-            article_content_hash=article_content_hash(
-                target.article.title, target.article.content
-            ),
+            article_content_hash=article_content_hash(target.article.title, target.article.content),
             ticker=target.member.ticker,
             model=spec.model,
             quantization=spec.quantization,
@@ -300,10 +296,17 @@ class OllamaStructuredClient:
             assessment=assessment,
         )
         cache.store(record)
-        return record
+        canonical = cache.load(key)
+        if canonical is None:  # pragma: no cover - store/load contract guard
+            raise RuntimeError(f"Local cache record disappeared after write: {key}")
+        # This invocation performed inference even if a concurrent process won the
+        # atomic cache write.  Return the cache winner's deterministic provenance.
+        return canonical.model_copy(update={"from_cache": False})
 
 
-def ollama_model_metadata(model: str, *, base_url: str = "http://127.0.0.1:11434") -> dict[str, Any]:
+def ollama_model_metadata(
+    model: str, *, base_url: str = "http://127.0.0.1:11434"
+) -> dict[str, Any]:
     """Return model metadata without loading the model into VRAM."""
 
     with httpx.Client(base_url=base_url, timeout=30.0) as http:

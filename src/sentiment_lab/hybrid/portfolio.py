@@ -23,9 +23,7 @@ class PortfolioSpecification(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
     signal: str = "sentiment_confidence_materiality"
-    aggregation: Literal["strongest_company_day", "company_day_aggregate"] = (
-        "strongest_company_day"
-    )
+    aggregation: Literal["strongest_company_day", "company_day_aggregate"] = "strongest_company_day"
     minimum_confidence: float = Field(default=0.0, ge=0.0, le=1.0)
     minimum_relevance: float = Field(default=0.0, ge=0.0, le=1.0)
     minimum_materiality: float = Field(default=0.0, ge=0.0, le=1.0)
@@ -132,8 +130,7 @@ def _position_days(
                     asset_return = float(price["adjusted_close"]) / adjusted_open - 1.0
                 else:
                     asset_return = (
-                        float(price["adjusted_close"])
-                        / float(rows[index - 1]["adjusted_close"])
+                        float(price["adjusted_close"]) / float(rows[index - 1]["adjusted_close"])
                         - 1.0
                     )
                 output.append(
@@ -180,9 +177,7 @@ def _performance(returns: np.ndarray) -> dict[str, float | None]:
     volatility = float(np.std(returns, ddof=1) * math.sqrt(252)) if len(returns) > 1 else 0.0
     mean = float(np.mean(returns) * 252)
     downside = returns[returns < 0]
-    downside_vol = (
-        float(np.std(downside, ddof=1) * math.sqrt(252)) if len(downside) > 1 else 0.0
-    )
+    downside_vol = float(np.std(downside, ddof=1) * math.sqrt(252)) if len(downside) > 1 else 0.0
     years = len(returns) / 252
     cagr = float(equity[-1] ** (1.0 / years) - 1.0) if years > 0 and equity[-1] > 0 else None
     return {
@@ -211,9 +206,7 @@ def _daily_portfolio(
     rows: list[dict[str, Any]] = []
     for day in calendar:
         active = by_date[day]
-        weights = _weights(
-            active, mode=mode, maximum_company_weight=maximum_company_weight
-        )
+        weights = _weights(active, mode=mode, maximum_company_weight=maximum_company_weight)
         returns_by_ticker = {item.ticker: item.asset_return for item in active}
         gross_return = sum(weights[ticker] * returns_by_ticker[ticker] for ticker in weights)
         turnover = sum(
@@ -221,14 +214,10 @@ def _daily_portfolio(
             for ticker in set(weights) | set(previous)
         )
         long_contribution = sum(
-            weight * returns_by_ticker[ticker]
-            for ticker, weight in weights.items()
-            if weight > 0
+            weight * returns_by_ticker[ticker] for ticker, weight in weights.items() if weight > 0
         )
         short_contribution = sum(
-            weight * returns_by_ticker[ticker]
-            for ticker, weight in weights.items()
-            if weight < 0
+            weight * returns_by_ticker[ticker] for ticker, weight in weights.items() if weight < 0
         )
         gross_exposure = sum(abs(value) for value in weights.values())
         concentration = (
@@ -329,9 +318,7 @@ def run_portfolio_backtests(
     )
     if config.specification.aggregation == "strongest_company_day":
         events = (
-            filtered_events.with_columns(
-                pl.col("portfolio_signal").abs().alias("_strength")
-            )
+            filtered_events.with_columns(pl.col("portfolio_signal").abs().alias("_strength"))
             .sort("_strength", descending=True)
             .group_by(["research_split", "ticker", "entry_date"], maintain_order=True)
             .first()
@@ -363,16 +350,12 @@ def run_portfolio_backtests(
         selected = events.filter(pl.col("research_split") == split)
         results["splits"][split] = {}
         for holding in config.specification.holding_periods:
-            position_days, suppressed = _position_days(
-                selected, prices, holding_period=holding
-            )
+            position_days, suppressed = _position_days(selected, prices, holding_period=holding)
             if position_days:
                 first = min(item.date for item in position_days)
                 last = max(item.date for item in position_days)
                 calendar = sorted(
-                    value
-                    for value in set(prices["date"].to_list())
-                    if first <= value <= last
+                    value for value in set(prices["date"].to_list()) if first <= value <= last
                 )
             else:
                 calendar = []
@@ -389,9 +372,7 @@ def run_portfolio_backtests(
                     base_cost_bps=config.specification.base_cost_bps,
                     conservative_cost_bps=config.specification.conservative_cost_bps,
                 )
-                path = store.write_parquet(
-                    daily, root / f"{split}_{holding}d_{mode}_daily.parquet"
-                )
+                path = store.write_parquet(daily, root / f"{split}_{holding}d_{mode}_daily.parquet")
                 holding_result[mode] = {**summary, "daily_returns_path": str(path)}
             results["splits"][split][f"{holding}d"] = holding_result
     output = store.write_json(results, root / "metrics.json")

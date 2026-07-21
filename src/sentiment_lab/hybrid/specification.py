@@ -173,9 +173,7 @@ def freeze_primary_specification(
         metrics = {
             split: {
                 f"{horizon}d": _association(
-                    _purged(
-                        evaluated.filter(pl.col("research_split") == split), horizon
-                    ),
+                    _purged(evaluated.filter(pl.col("research_split") == split), horizon),
                     signal,
                     horizon,
                 )
@@ -183,12 +181,20 @@ def freeze_primary_specification(
             }
             for split in ("development", "validation")
         }
-        validation_ics = [metrics["validation"][f"{horizon}d"]["spearman_ic"] for horizon in (5, 21)]
-        development_ics = [metrics["development"][f"{horizon}d"]["spearman_ic"] for horizon in (5, 21)]
-        validation_signed = [metrics["validation"][f"{horizon}d"]["signed_return"] for horizon in (5, 21)]
+        validation_ics = [
+            metrics["validation"][f"{horizon}d"]["spearman_ic"] for horizon in (5, 21)
+        ]
+        development_ics = [
+            metrics["development"][f"{horizon}d"]["spearman_ic"] for horizon in (5, 21)
+        ]
+        validation_signed = [
+            metrics["validation"][f"{horizon}d"]["signed_return"] for horizon in (5, 21)
+        ]
         validation_n = min(metrics["validation"][f"{horizon}d"]["n"] for horizon in (5, 21))
         coverage = validation_n / validation_total if validation_total else 0.0
-        complete = all(value is not None for value in (*validation_ics, *development_ics, *validation_signed))
+        complete = all(
+            value is not None for value in (*validation_ics, *development_ics, *validation_signed)
+        )
         if complete:
             val_ic = float(np.mean(validation_ics))
             dev_ic = float(np.mean(development_ics))
@@ -201,9 +207,11 @@ def freeze_primary_specification(
             utility = -math.inf
             consistent = False
         p_values = [metrics["validation"][f"{horizon}d"]["p_value"] for horizon in (5, 21)]
-        combined_p = min(1.0, min(float(value) for value in p_values) * 2) if all(
-            value is not None for value in p_values
-        ) else None
+        combined_p = (
+            min(1.0, min(float(value) for value in p_values) * 2)
+            if all(value is not None for value in p_values)
+            else None
+        )
         candidates.append(
             {
                 "signal": signal,
@@ -224,24 +232,15 @@ def freeze_primary_specification(
         for candidate in candidates
         if candidate["utility"] is not None
         and candidate["validation_coverage"] >= config.minimum_validation_coverage
-        and min(
-            candidate["metrics"]["validation"][f"{horizon}d"]["n"]
-            for horizon in (5, 21)
-        )
+        and min(candidate["metrics"]["validation"][f"{horizon}d"]["n"] for horizon in (5, 21))
         >= config.minimum_validation_events
     ]
     if not eligible_candidates:
         raise RuntimeError("No development/validation specification passed coverage gates")
     selected = max(eligible_candidates, key=lambda value: float(value["utility"]))
-    confidence_index = {
-        value: index for index, value in enumerate(config.confidence_thresholds)
-    }
-    relevance_index = {
-        value: index for index, value in enumerate(config.relevance_thresholds)
-    }
-    materiality_index = {
-        value: index for index, value in enumerate(config.materiality_thresholds)
-    }
+    confidence_index = {value: index for index, value in enumerate(config.confidence_thresholds)}
+    relevance_index = {value: index for index, value in enumerate(config.relevance_thresholds)}
+    materiality_index = {value: index for index, value in enumerate(config.materiality_thresholds)}
     neighbors = [
         candidate
         for candidate in eligible_candidates
@@ -266,16 +265,13 @@ def freeze_primary_specification(
     ]
     nearby_positive = sum(
         all(
-            float(candidate["metrics"]["validation"][f"{horizon}d"]["spearman_ic"] or 0.0)
-            > 0
+            float(candidate["metrics"]["validation"][f"{horizon}d"]["spearman_ic"] or 0.0) > 0
             for horizon in (5, 21)
         )
         for candidate in neighbors
     )
     selected["nearby_candidate_count"] = len(neighbors)
-    selected["nearby_positive_fraction"] = (
-        nearby_positive / len(neighbors) if neighbors else 0.0
-    )
+    selected["nearby_positive_fraction"] = nearby_positive / len(neighbors) if neighbors else 0.0
     selected_aggregation = str(selected["aggregation"])
     portfolio_aggregation = (
         selected_aggregation
@@ -318,7 +314,9 @@ def freeze_primary_specification(
     }
     root = data_root / "results" / str(manifest["specification_id"])
     store = ArtifactStore(data_root, duckdb_path)
-    store.write_parquet(pl.DataFrame(candidates, infer_schema_length=None), root / "candidates.parquet")
+    store.write_parquet(
+        pl.DataFrame(candidates, infer_schema_length=None), root / "candidates.parquet"
+    )
     path = root / "manifest.json"
     if path.is_file():
         existing = json.loads(path.read_text(encoding="utf-8"))

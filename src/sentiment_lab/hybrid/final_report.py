@@ -88,9 +88,7 @@ def research_decision(
     dependence_adjusted = all(
         float(item.get("company_cluster_bootstrap_95_ci", {}).get("lower_95") or 0.0) > 0
         and float(
-            item.get("date_block_bootstrap_95_ci", {})
-            .get("signed_return", {})
-            .get("lower_95")
+            item.get("date_block_bootstrap_95_ci", {}).get("signed_return", {}).get("lower_95")
             or 0.0
         )
         > 0
@@ -145,7 +143,7 @@ table{{border-collapse:collapse;width:100%}}td,th{{border:1px solid #ccd1d1;padd
 <h1>Hybrid 5,000-Article Equity News Sentiment Study</h1>
 <div class="decision"><h2>{conclusion}</h2><p>Scale recommendation: {recommendation}</p></div>
 <h2>Decision gates</h2><table><tr><th>Gate</th><th>Result</th></tr>
-{''.join(f'<tr><td>{html.escape(key)}</td><td>{value}</td></tr>' for key,value in results['decision_gates'].items())}
+{"".join(f"<tr><td>{html.escape(key)}</td><td>{value}</td></tr>" for key, value in results["decision_gates"].items())}
 </table><h2>Machine-readable evidence</h2><pre>{payload}</pre></body></html>"""
 
 
@@ -173,9 +171,12 @@ def build_final_report(
             raise RuntimeError(f"Final report evidence hash mismatch: {name}")
     evidence = {name: _load(path) for name, path in paths.items()}
     specification = evidence["specification"]["selected_predictive_specification"]
-    aggregation = specification["aggregation"]
-    signal = specification["signal"]
-    prediction = evidence["prediction"][aggregation]["holdout"][signal]
+    frozen_prediction = evidence["prediction"].get("frozen_primary_specification")
+    if not isinstance(frozen_prediction, dict):
+        raise RuntimeError("Prediction evidence lacks the frozen primary analysis")
+    if frozen_prediction.get("specification") != specification:
+        raise RuntimeError("Prediction evidence does not match the frozen specification")
+    prediction = frozen_prediction["holdout"]
     baseline = evidence["baselines"]["splits"]["holdout"]
     portfolio = evidence["portfolio"]["splits"]["holdout"]
     portfolio_mode = "market_neutral"
@@ -238,9 +239,7 @@ def build_final_report(
             "local_electricity_kwh": local_energy,
             "local_electricity_usd": local_electricity_cost,
             "total_hybrid_usd": (
-                config.original_openai_cost_usd
-                + additional_cost
-                + local_electricity_cost
+                config.original_openai_cost_usd + additional_cost + local_electricity_cost
             ),
         },
         "evidence_hashes": config.expected_hashes,

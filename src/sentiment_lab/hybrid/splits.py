@@ -34,7 +34,9 @@ def freeze_chronological_splits(
         articles_path, columns=["article_id", "ticker", "provider_timestamp"]
     ).sort(["provider_timestamp", "ticker", "article_id"])
     if articles.height != 5000:
-        raise RuntimeError(f"Chronological split requires exactly 5,000 rows, got {articles.height}")
+        raise RuntimeError(
+            f"Chronological split requires exactly 5,000 rows, got {articles.height}"
+        )
     assignments = articles.with_row_index("chronological_index").with_columns(
         pl.when(pl.col("chronological_index") < 3000)
         .then(pl.lit("development"))

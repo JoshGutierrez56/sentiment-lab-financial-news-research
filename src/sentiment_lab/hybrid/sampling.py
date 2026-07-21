@@ -96,7 +96,9 @@ _EVENT_PATTERNS: tuple[tuple[HybridEventType, tuple[str, ...]], ...] = (
     ),
     (
         HybridEventType.financing,
-        (r"\b(?:debt offering|equity offering|secondary offering|convertible notes?|raises? capital|refinanc)\w*\b",),
+        (
+            r"\b(?:debt offering|equity offering|secondary offering|convertible notes?|raises? capital|refinanc)\w*\b",
+        ),
     ),
     (
         HybridEventType.restructuring,
@@ -118,11 +120,15 @@ _EVENT_PATTERNS: tuple[tuple[HybridEventType, tuple[str, ...]], ...] = (
     ),
     (
         HybridEventType.capital_allocation,
-        (r"\b(?:capital allocation|special dividend|asset sale|investment plan|capital spending|capex)\b",),
+        (
+            r"\b(?:capital allocation|special dividend|asset sale|investment plan|capital spending|capex)\b",
+        ),
     ),
     (
         HybridEventType.macro_exposure,
-        (r"\b(?:tariff|interest rates?|inflation|currency headwind|commodity prices?|recession)\b",),
+        (
+            r"\b(?:tariff|interest rates?|inflation|currency headwind|commodity prices?|recession)\b",
+        ),
     ),
 )
 
@@ -188,9 +194,10 @@ def company_relevance_score(
     headline_alias = any(alias in title for alias in aliases)
     opening_alias = any(alias in opening for alias in aliases)
     body_mentions = sum(body.count(alias) for alias in aliases)
-    ticker_headline = bool(
-        re.search(rf"(?:\$|\b){re.escape(ticker_base)}\b", article.title, re.I)
-    ) and len(ticker_base) >= 3
+    ticker_headline = (
+        bool(re.search(rf"(?:\$|\b){re.escape(ticker_base)}\b", article.title, re.I))
+        and len(ticker_base) >= 3
+    )
     symbol_match = member.ticker in article.symbols
     event_candidates = candidate_event_types(article.title, article.content)
     event_specific = event_candidates != (HybridEventType.other,)
@@ -275,7 +282,9 @@ def cluster_syndicated_stories(
         cluster_id: str | None = None
         for candidate in sorted(candidate_clusters):
             representative, prior_hash = representatives[candidate]
-            within_window = abs(article.provider_timestamp - representative.provider_timestamp) <= timedelta(days=14)
+            within_window = abs(
+                article.provider_timestamp - representative.provider_timestamp
+            ) <= timedelta(days=14)
             similar_title_and_body = (
                 _token_similarity(article.title, representative.title) >= 0.70
                 and _token_similarity(article.content, representative.content, limit=250) >= 0.80

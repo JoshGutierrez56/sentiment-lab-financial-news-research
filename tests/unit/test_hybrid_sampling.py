@@ -66,7 +66,9 @@ def test_company_relevance_requires_primary_company_not_metadata_only() -> None:
         "Five stocks to watch in a volatile market",
         "A broad market summary mentioned many companies before one incidental Acme reference. "
         * 12,
-    ).model_copy(update={"symbols": ["ACME.US", "ONE.US", "TWO.US", "THREE.US", "FOUR.US", "FIVE.US"]})
+    ).model_copy(
+        update={"symbols": ["ACME.US", "ONE.US", "TWO.US", "THREE.US", "FOUR.US", "FIVE.US"]}
+    )
     assert company_relevance_score(direct, member).eligible
     result = company_relevance_score(incidental, member)
     assert not result.eligible

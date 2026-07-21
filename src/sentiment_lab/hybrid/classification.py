@@ -66,6 +66,13 @@ class HybridLocalRunOutput:
     manifest_path: Path
 
 
+@dataclass(frozen=True)
+class CacheRebuildOutput:
+    classifications_path: Path
+    reproducibility_manifest_path: Path
+    classifications_sha256: str
+
+
 class LocalRunQualityError(RuntimeError):
     """Raised only after partial results and a diagnostic manifest are persisted."""
 
@@ -85,6 +92,13 @@ def _target(row: dict[str, Any]) -> LocalTarget:
 
 
 def _row(record: LocalClassificationRecord) -> dict[str, Any]:
+    """Return only deterministic scientific and model-output provenance fields.
+
+    Cache-hit state and inference timings describe a particular execution.  Embedding
+    them in the classification artifact made a cache-only replay byte-different even
+    though every scientific value was unchanged.
+    """
+
     return {
         "article_id": record.article_id,
         "article_content_hash": record.article_content_hash,
@@ -94,16 +108,94 @@ def _row(record: LocalClassificationRecord) -> dict[str, Any]:
         "prompt_version": record.prompt_version,
         "schema_version": record.schema_version,
         "cache_key": record.cache_key,
-        "from_cache": record.from_cache,
         "response_hash": record.response_hash,
         "initial_output_valid": record.initial_output_valid,
         "validation_attempts": record.validation_attempts,
-        "prompt_tokens": record.usage.prompt_tokens,
-        "output_tokens": record.usage.output_tokens,
-        "total_duration_ns": record.usage.total_duration_ns,
-        "eval_duration_ns": record.usage.eval_duration_ns,
         **record.assessment.model_dump(mode="python"),
     }
+
+
+def _config_hash(config: HybridLocalRunConfig) -> str:
+    material = config.model_dump(mode="json")
+    return hashlib.sha256(stable_json(material).encode()).hexdigest()
+
+
+def _frozen_articles(config: HybridLocalRunConfig) -> pl.DataFrame:
+    manifest = json.loads(config.sample_manifest_path.read_text(encoding="utf-8"))
+    if manifest.get("sample_hash") != config.expected_sample_hash:
+        raise RuntimeError("Frozen sample manifest hash does not match preregistration")
+    if manifest.get("frozen_before_local_inference") is not True:
+        raise RuntimeError("Sample was not frozen before local inference")
+    if file_sha256(config.sample_articles_path) != config.expected_articles_sha256:
+        raise RuntimeError("Frozen article artifact hash does not match preregistration")
+    articles = pl.read_parquet(config.sample_articles_path).sort(
+        ["provider_timestamp", "ticker", "article_id"]
+    )
+    if articles.height != config.expected_article_count:
+        raise RuntimeError(
+            f"Expected {config.expected_article_count} frozen articles, got {articles.height}"
+        )
+    return articles
+
+
+def rebuild_local_classifications_from_cache(
+    config: HybridLocalRunConfig,
+    *,
+    data_root: Path,
+    duckdb_path: Path,
+    output_path: Path | None = None,
+) -> CacheRebuildOutput:
+    """Rebuild the canonical classification table without model or API inference."""
+
+    articles = _frozen_articles(config)
+    cache = LocalClassificationCache(data_root)
+    records: list[LocalClassificationRecord] = []
+    cache_material: list[dict[str, str]] = []
+    for row in articles.iter_rows(named=True):
+        target = _target(row)
+        key = cache.key(target, config.model)
+        record = cache.load(key)
+        if record is None:
+            raise RuntimeError(f"Missing immutable local cache record: {key}")
+        if record.article_id != target.article.article_id or record.ticker != target.member.ticker:
+            raise RuntimeError(f"Local cache identity mismatch: {key}")
+        records.append(record)
+        cache_material.append({"cache_key": key, "response_hash": record.response_hash})
+
+    rows = [_row(record) for record in records]
+    frame = pl.DataFrame(rows, infer_schema_length=None)
+    config_hash = _config_hash(config)
+    root = data_root / "results" / f"hybrid_local_{config_hash[:16]}"
+    classifications_path = output_path or root / "classifications.parquet"
+    store = ArtifactStore(data_root, duckdb_path)
+    store.write_parquet(frame, classifications_path)
+    digest = file_sha256(classifications_path)
+    reproducibility_manifest = {
+        "schema_version": "hybrid_local_cache_rebuild.v1",
+        "definition": (
+            "Canonical classifications rebuilt only from the frozen sample and permanent "
+            "schema-validated local cache; execution-state fields are excluded."
+        ),
+        "sample_hash": config.expected_sample_hash,
+        "sample_articles_sha256": config.expected_articles_sha256,
+        "config_hash": config_hash,
+        "row_count": frame.height,
+        "column_order": frame.columns,
+        "dtypes": {name: str(dtype) for name, dtype in frame.schema.items()},
+        "cache_key_response_hash_digest": hashlib.sha256(
+            stable_json(cache_material).encode()
+        ).hexdigest(),
+        "logical_rows_sha256": hashlib.sha256(stable_json(rows).encode()).hexdigest(),
+        "classifications_sha256": digest,
+        "classifications_path": str(classifications_path),
+    }
+    reproducibility_manifest_path = root / "reproducibility.json"
+    store.write_json(reproducibility_manifest, reproducibility_manifest_path)
+    return CacheRebuildOutput(
+        classifications_path,
+        reproducibility_manifest_path,
+        digest,
+    )
 
 
 def _gate_failures(
@@ -128,16 +220,13 @@ def _gate_failures(
         other_fraction = sum(
             record.assessment.event_type.value == "other" for record in records
         ) / len(records)
-        tradable_fraction = sum(record.assessment.tradable for record in records) / len(
-            records
-        )
+        tradable_fraction = sum(record.assessment.tradable for record in records) / len(records)
         labels = Counter(record.assessment.sentiment_label.value for record in records)
         dominant_label, dominant_count = labels.most_common(1)[0]
         dominant_fraction = dominant_count / len(records)
         if other_fraction > gates.maximum_other_fraction:
             problems.append(
-                f"other event type {other_fraction:.3%} exceeds "
-                f"{gates.maximum_other_fraction:.3%}"
+                f"other event type {other_fraction:.3%} exceeds {gates.maximum_other_fraction:.3%}"
             )
         if tradable_fraction < gates.minimum_tradable_fraction:
             problems.append(
@@ -168,23 +257,9 @@ def run_local_classification(
 ) -> HybridLocalRunOutput:
     """Classify the frozen sample, checkpointing without mutating its artifacts."""
 
-    manifest = json.loads(config.sample_manifest_path.read_text(encoding="utf-8"))
-    if manifest.get("sample_hash") != config.expected_sample_hash:
-        raise RuntimeError("Frozen sample manifest hash does not match preregistration")
-    if manifest.get("frozen_before_local_inference") is not True:
-        raise RuntimeError("Sample was not frozen before local inference")
-    if file_sha256(config.sample_articles_path) != config.expected_articles_sha256:
-        raise RuntimeError("Frozen article artifact hash does not match preregistration")
-    articles = pl.read_parquet(config.sample_articles_path).sort(
-        ["provider_timestamp", "ticker", "article_id"]
-    )
-    if articles.height != config.expected_article_count:
-        raise RuntimeError(
-            f"Expected {config.expected_article_count} frozen articles, got {articles.height}"
-        )
-
+    articles = _frozen_articles(config)
     material = config.model_dump(mode="json")
-    config_hash = hashlib.sha256(stable_json(material).encode()).hexdigest()
+    config_hash = _config_hash(config)
     run_id = f"hybrid_local_{config_hash[:16]}"
     root = data_root / "results" / run_id
     classifications_path = root / "classifications.parquet"
@@ -201,8 +276,7 @@ def run_local_classification(
             existing_manifest.get("status") == "complete"
             and existing_manifest.get("config_hash") == config_hash
             and existing_manifest.get("sample_hash") == config.expected_sample_hash
-            and existing_manifest.get("sample_articles_sha256")
-            == config.expected_articles_sha256
+            and existing_manifest.get("sample_articles_sha256") == config.expected_articles_sha256
             and existing_ids.height == articles.height
             and existing_ids.get_column("article_id").n_unique() == articles.height
         ):
@@ -255,9 +329,7 @@ def run_local_classification(
                         break
     finally:
         elapsed = time.monotonic() - started
-        gpu = telemetry.stop(
-            electricity_rate_usd_per_kwh=config.electricity_rate_usd_per_kwh
-        )
+        gpu = telemetry.stop(electricity_rate_usd_per_kwh=config.electricity_rate_usd_per_kwh)
         checkpoint()
 
     counts = Counter(record.assessment.sentiment_label.value for record in records)

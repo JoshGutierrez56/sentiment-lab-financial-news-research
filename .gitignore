@@ -25,6 +25,7 @@ htmlcov/
 data/raw/**
 data/normalized/**
 data/features/**
+data/derived/**
 data/results/**
 data/*.duckdb*
 !data/raw/.gitkeep

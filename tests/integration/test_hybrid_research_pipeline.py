@@ -148,6 +148,41 @@ def test_prediction_orchestration_is_split_locked_and_return_artifact_is_complet
     assert metrics["included_splits"] == ["development"]
     assert "holdout" not in metrics["event_level"]
 
+    frozen_specification = {
+        "signal": "sentiment_confidence",
+        "aggregation": "strongest_company_day",
+        "minimum_confidence": 0.0,
+        "minimum_relevance": 0.0,
+        "minimum_materiality": 0.95,
+    }
+    primary_manifest = tmp_path / "primary.json"
+    primary_manifest.write_text(
+        json.dumps(
+            {
+                "frozen_before_holdout": True,
+                "sample_hash": "a" * 64,
+                "selected_predictive_specification": frozen_specification,
+            }
+        ),
+        encoding="utf-8",
+    )
+    holdout_config = config.model_copy(
+        update={
+            "name": "holdout",
+            "included_splits": ["holdout"],
+            "primary_specification_manifest": primary_manifest,
+        }
+    )
+    holdout_metrics_path, _ = run_prediction_analysis(
+        holdout_config,
+        data_root=tmp_path,
+        duckdb_path=tmp_path / "research.duckdb",
+    )
+    holdout_metrics = json.loads(holdout_metrics_path.read_text(encoding="utf-8"))
+    frozen = holdout_metrics["frozen_primary_specification"]
+    assert frozen["specification"] == frozen_specification
+    assert frozen["holdout"]["5d"]["n"] == 0
+
 
 def test_baselines_portfolio_and_additional_selection_run_on_frozen_inputs(
     tmp_path: Path,
@@ -204,6 +239,4 @@ def test_baselines_portfolio_and_additional_selection_run_on_frozen_inputs(
     )
     selected = pl.read_parquet(sample.sample_path)
     assert selected.height == 50
-    assert not set(selected["article_id"]) & {
-        f"article-{index:05d}" for index in range(250)
-    }
+    assert not set(selected["article_id"]) & {f"article-{index:05d}" for index in range(250)}

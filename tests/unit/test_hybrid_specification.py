@@ -55,9 +55,7 @@ def test_primary_specification_freezes_without_holdout_rows(tmp_path: Path) -> N
                 "research_split": "development" if index < 100 else "validation",
                 "ticker": f"T{index % 20}.US",
                 "entry_date": date(2024, 1, 1) + timedelta(days=index),
-                "next_split_entry_date": (
-                    date(2025, 1, 1) if index < 100 else date(2026, 1, 1)
-                ),
+                "next_split_entry_date": (date(2025, 1, 1) if index < 100 else date(2026, 1, 1)),
                 "exit_date_5d": date(2024, 1, 1) + timedelta(days=index + 5),
                 "exit_date_21d": date(2024, 1, 1) + timedelta(days=index + 21),
                 "tradable": True,

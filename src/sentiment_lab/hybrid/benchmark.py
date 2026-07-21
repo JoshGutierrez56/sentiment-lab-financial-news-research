@@ -232,16 +232,13 @@ def _selection_score(metrics: dict[str, Any], config: LocalBenchmarkConfig) -> d
         float(agreement["event_type_agreement"]),
     ]
     openai_agreement = float(np.mean(agreement_values))
-    valid = 0.75 * float(metrics["final_valid_rate"]) + 0.25 * float(
-        metrics["initial_valid_rate"]
-    )
+    valid = 0.75 * float(metrics["final_valid_rate"]) + 0.25 * float(metrics["initial_valid_rate"])
     openai_coverage = float(metrics["openai_tradable_coverage"])
     local_coverage = float(prediction["tradable_coverage"])
     coverage = max(0.0, 1.0 - abs(local_coverage - openai_coverage) / 0.75)
     runtime = min(
         1.0,
-        float(metrics["articles_per_minute"])
-        / config.runtime_target_articles_per_minute,
+        float(metrics["articles_per_minute"]) / config.runtime_target_articles_per_minute,
     )
     cost = min(
         1.0,
@@ -300,9 +297,7 @@ def run_local_benchmark(
                 if index % 10 == 0:
                     log.info("%s progress %d/250 failures=%d", spec.model, index, len(failures))
         elapsed = time.monotonic() - started
-        telemetry = sampler.stop(
-            electricity_rate_usd_per_kwh=config.electricity_rate_usd_per_kwh
-        )
+        telemetry = sampler.stop(electricity_rate_usd_per_kwh=config.electricity_rate_usd_per_kwh)
         local = pl.DataFrame([_local_row(item) for item in records], infer_schema_length=None)
         joined = calibration.join(local, on="article_id", how="left", validate="1:1")
         valid = local.height
@@ -327,8 +322,7 @@ def run_local_benchmark(
             "failures": failures,
             "final_valid_rate": valid / 250,
             "initial_valid_rate": (
-                sum(bool(value) for value in local["local_initial_output_valid"].to_list())
-                / valid
+                sum(bool(value) for value in local["local_initial_output_valid"].to_list()) / valid
                 if valid
                 else 0.0
             ),

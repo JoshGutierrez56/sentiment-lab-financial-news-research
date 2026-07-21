@@ -162,8 +162,8 @@ def freeze_additional_openai_sample(
             high_confidence_threshold=config.high_confidence_threshold,
             low_confidence_threshold=config.low_confidence_threshold,
         )
-        rank_material = (
-            f"{config.random_seed}:{row['article_id']}:{row['ticker']}:" + ",".join(buckets)
+        rank_material = f"{config.random_seed}:{row['article_id']}:{row['ticker']}:" + ",".join(
+            buckets
         )
         rows.append(
             {
@@ -205,10 +205,7 @@ def freeze_additional_openai_sample(
         if len(selected) >= config.maximum_articles:
             break
         for row in candidates:
-            if (
-                len(selected) >= config.maximum_articles
-                or bucket_counts[bucket] >= target
-            ):
+            if len(selected) >= config.maximum_articles or bucket_counts[bucket] >= target:
                 break
             if bucket not in row["calibration_buckets"] or not allowed(row):
                 continue
@@ -259,9 +256,7 @@ def freeze_additional_openai_sample(
         "bucket_counts": dict(bucket_counts),
         "ticker_count": len(ticker_counts),
         "sector_count": len(sector_counts),
-        "year_counts": dict(
-            Counter(str(row["provider_timestamp"].year) for row in selected)
-        ),
+        "year_counts": dict(Counter(str(row["provider_timestamp"].year) for row in selected)),
         "event_type_counts": dict(Counter(str(row["event_type"]) for row in selected)),
         "input_hashes": {str(path): digest for path, digest in expected.items()},
         "artifacts": {"sample": str(sample_path)},
@@ -321,9 +316,7 @@ def run_additional_openai_calibration(
         article = NewsArticle.model_validate(
             {key: value for key, value in row.items() if key in article_fields}
         )
-        targets.append(
-            ClassificationTarget(article, str(row["ticker"]), str(row["company_name"]))
-        )
+        targets.append(ClassificationTarget(article, str(row["ticker"]), str(row["company_name"])))
     client = OpenAIBatchClient(api_key, app_config.openai, app_config.storage.data_root)
     classifier = ArticleClassifier(
         client,

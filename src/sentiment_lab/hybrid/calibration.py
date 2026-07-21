@@ -184,4 +184,3 @@ def register_calibration_v1(
         parquet_path=parquet_path,
         manifest_path=manifest_path,
     )
-

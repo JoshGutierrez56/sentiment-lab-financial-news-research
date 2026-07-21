@@ -145,9 +145,7 @@ def _quarter_windows(start: date, end: date) -> list[tuple[date, date]]:
     return windows
 
 
-def _complete_returns(
-    article: NewsArticle, prices: list[EODPrice], horizons: list[int]
-) -> bool:
+def _complete_returns(article: NewsArticle, prices: list[EODPrice], horizons: list[int]) -> bool:
     publication_day = article.provider_timestamp.astimezone(NEW_YORK).date()
     entry_index = next(
         (index for index, item in enumerate(prices) if item.date > publication_day), None
@@ -200,7 +198,9 @@ def _select_year(
         selected_ids.add(chosen.article.article_id)
         event_counts[chosen.primary_event_type] += 1
         quarter_counts[(chosen.article.provider_timestamp.month - 1) // 3] += 1
-    return sorted(selected, key=lambda item: (item.article.provider_timestamp, item.article.article_id))
+    return sorted(
+        selected, key=lambda item: (item.article.provider_timestamp, item.article.article_id)
+    )
 
 
 def _select_company_backfill(
@@ -245,27 +245,19 @@ def _aligned_rows(
         prices = prices_by_ticker[item.member.ticker]
         local_publication = item.article.provider_timestamp.astimezone(NEW_YORK)
         entry_index = next(
-            (
-                index
-                for index, price in enumerate(prices)
-                if price.date > local_publication.date()
-            ),
+            (index for index, price in enumerate(prices) if price.date > local_publication.date()),
             None,
         )
         if entry_index is None:
             raise RuntimeError(f"No conservative entry for {item.article.article_id}")
         entry = prices[entry_index]
-        entry_timestamp = datetime.combine(
-            entry.date, time(9, 30), tzinfo=NEW_YORK
-        ).astimezone(UTC)
+        entry_timestamp = datetime.combine(entry.date, time(9, 30), tzinfo=NEW_YORK).astimezone(UTC)
         row: dict[str, Any] = {
             **item.article.model_dump(mode="python"),
             "ticker": item.member.ticker,
             "company_name": item.member.company_name,
             "sector": item.member.sector,
-            "article_content_hash": article_content_hash(
-                item.article.title, item.article.content
-            ),
+            "article_content_hash": article_content_hash(item.article.title, item.article.content),
             "story_body_hash": story_body_hash(item.article.content),
             "story_cluster_id": item.cluster_id,
             "pre_inference_relevance_score": item.relevance.score,
@@ -281,9 +273,7 @@ def _aligned_rows(
         for horizon in horizons:
             exit_price = prices[entry_index + horizon - 1]
             row[f"exit_date_{horizon}d"] = exit_price.date
-            row[f"future_return_{horizon}d"] = (
-                exit_price.adjusted_close / entry.adjusted_open - 1.0
-            )
+            row[f"future_return_{horizon}d"] = exit_price.adjusted_close / entry.adjusted_open - 1.0
         rows.append(row)
     return rows
 
@@ -302,9 +292,7 @@ def sync_hybrid_sample(
     scored: list[ScoredCandidate] = []
     candidate_rows: list[dict[str, Any]] = []
     prices_by_ticker: dict[str, list[EODPrice]] = {}
-    price_end = min(
-        date.today(), config.news_end + timedelta(days=max(config.horizons) * 3 + 14)
-    )
+    price_end = min(date.today(), config.news_end + timedelta(days=max(config.horizons) * 3 + 14))
     totals: Counter[str] = Counter()
     seen_article_targets: set[tuple[str, str]] = set()
 
@@ -427,9 +415,7 @@ def sync_hybrid_sample(
             company_selected.extend(yearly)
         shortfall = config.articles_per_company - len(company_selected)
         if shortfall > 0:
-            company_pool = [
-                item for item in clustered if item.member.ticker == member.ticker
-            ]
+            company_pool = [item for item in clustered if item.member.ticker == member.ticker]
             company_selected.extend(
                 _select_company_backfill(
                     company_pool,
@@ -440,9 +426,7 @@ def sync_hybrid_sample(
             )
         if len(company_selected) != config.articles_per_company:
             raise RuntimeError(f"{member.ticker} did not produce its frozen allocation")
-        represented_years = {
-            item.article.provider_timestamp.year for item in company_selected
-        }
+        represented_years = {item.article.provider_timestamp.year for item in company_selected}
         if len(represented_years) < config.minimum_years_per_company:
             raise RuntimeError(
                 f"{member.ticker} spans only {len(represented_years)} years; "
@@ -450,7 +434,13 @@ def sync_hybrid_sample(
             )
         selected.extend(company_selected)
 
-    selected.sort(key=lambda item: (item.article.provider_timestamp, item.member.ticker, item.article.article_id))
+    selected.sort(
+        key=lambda item: (
+            item.article.provider_timestamp,
+            item.member.ticker,
+            item.article.article_id,
+        )
+    )
     if len(selected) != config.max_articles:
         raise RuntimeError(f"Sample has {len(selected)} articles, expected {config.max_articles}")
     if len({item.article.article_id for item in selected}) != len(selected):
@@ -458,7 +448,9 @@ def sync_hybrid_sample(
     if len({item.cluster_id for item in selected}) != len(selected):
         raise RuntimeError("Frozen sample contains duplicate story clusters")
     event_counts = Counter(item.primary_event_type for item in selected)
-    earnings_guidance = event_counts[HybridEventType.earnings] + event_counts[HybridEventType.guidance]
+    earnings_guidance = (
+        event_counts[HybridEventType.earnings] + event_counts[HybridEventType.guidance]
+    )
     other_fraction = event_counts[HybridEventType.other] / len(selected)
     if earnings_guidance < config.minimum_earnings_guidance:
         raise RuntimeError(
@@ -512,17 +504,14 @@ def sync_hybrid_sample(
         "company_count": len({item.member.ticker for item in selected}),
         "sector_count": len({item.member.sector for item in selected}),
         "years": sorted({item.article.provider_timestamp.year for item in selected}),
-        "maximum_ticker_fraction": max(
-            Counter(item.member.ticker for item in selected).values()
-        )
+        "maximum_ticker_fraction": max(Counter(item.member.ticker for item in selected).values())
         / len(selected),
         "event_type_candidates": {key.value: value for key, value in event_counts.items()},
         "ticker_year_counts": {
             f"{ticker}:{year}": count
             for (ticker, year), count in sorted(
                 Counter(
-                    (item.member.ticker, item.article.provider_timestamp.year)
-                    for item in selected
+                    (item.member.ticker, item.article.provider_timestamp.year) for item in selected
                 ).items()
             )
         },

@@ -1,0 +1,79 @@
+dataset:
+  name: frozen_hybrid_5000_event_surprise_v1
+  cache_only: true
+  signals_path: data/derived/event_surprise_v1/post_completion_5000/event_surprise_signals.parquet
+  signals_sha256: 9388d59a609fcbef9e5b9cb91bfdfcdccd5fffa71ad424c9b76f9ebfd47efdf5
+  articles_path: data/normalized/hybrid_5000/7b07079fb2bcbf7546e1dd810ee081ddb86adb7bb37aa0979efac31fe30553a7/articles.parquet
+  articles_sha256: 8ada422fcdefa894c55ae51400e073f97fa6d8e26272cde98d8926ce27b68385
+  prices_path: data/normalized/hybrid_5000/7b07079fb2bcbf7546e1dd810ee081ddb86adb7bb37aa0979efac31fe30553a7/prices.parquet
+  prices_sha256: 4f030c49deea3dd536dcb4d06f3b41d8447492ebfae2370d3646bb615ce79615
+feature_generation:
+  signal_column: event_surprise_signal
+  abstentions: exclude
+  company_day_selection: strongest_absolute_signal_then_article_id
+  duplicate_story_policy: frozen_sample_has_one_record_per_story_cluster
+model:
+  inference: cache_only
+  edge_calibration:
+    method: development_only_ols_through_origin
+    target: future_return_5d
+signal:
+  direction: sign_of_event_surprise_signal
+  minimum_absolute_signal: 0.0
+  no_post_freeze_threshold_search: true
+validation:
+  primary_split: holdout
+  diagnostic_splits:
+    - development
+    - validation
+  primary_horizon_sessions: 5
+  bootstrap_iterations: 2000
+  bootstrap_block_length_sessions: 5
+  gates:
+    minimum_holdout_trades: 30
+    minimum_holdout_base_net_sharpe: 0.75
+    minimum_holdout_bootstrap_ci_lower: 0.0
+    minimum_holdout_conservative_net_sharpe: 0.0
+    require_positive_validation_base_net_return: true
+    maximum_single_ticker_absolute_pnl_share: 0.20
+execution:
+  entry: first_adjusted_open_on_frozen_entry_date
+  exit: adjusted_close_after_five_sessions_including_entry_session
+  holding_sessions: 5
+  same_ticker_overlap: reject_until_prior_position_exits
+  split_boundary: purge_if_outcome_reaches_next_split_start
+  starting_capital_usd: 1000000.0
+  position_weight: 0.02
+  maximum_gross_exposure: 1.0
+  maximum_long_exposure: 0.5
+  maximum_short_exposure: 0.5
+  maximum_volume_participation: 0.01
+costs:
+  primary_scenario: base
+  cost_safety_multiple: 2.0
+  research_cost_per_entry_usd: 0.02
+  base:
+    commission_per_share_usd: 0.005
+    commission_minimum_usd: 1.0
+    half_spread_bps_per_side: 5.0
+    slippage_bps_per_side: 2.0
+    market_impact_coefficient: 0.10
+    annual_short_borrow_rate: 0.03
+  conservative:
+    commission_per_share_usd: 0.005
+    commission_minimum_usd: 1.0
+    half_spread_bps_per_side: 10.0
+    slippage_bps_per_side: 5.0
+    market_impact_coefficient: 0.20
+    annual_short_borrow_rate: 0.08
+portfolio:
+  construction: fixed_notional_side_capped_long_short_event_sleeves
+  rebalance_between_entry_and_exit: false
+  inactive_market_sessions: include_as_zero_return
+  annualization_sessions: 252
+reporting:
+  status: frozen_one_shot_final_retrospective
+  exploratory: false
+  disclose_holdout_ic_previously_viewed: true
+  forbid_alpha_or_deployability_claim_without_all_gates: true
+random_seed: 20260721

@@ -11,6 +11,7 @@ from sentiment_lab.hybrid.classification import (
     HybridLocalRunConfig,
     LocalRunQualityGates,
     _gate_failures,
+    _row,
     run_local_classification,
 )
 from sentiment_lab.hybrid.hardware import GPUTelemetrySummary
@@ -65,15 +66,21 @@ def _record(*, event_type: str = "earnings", label: str = "bullish") -> LocalCla
 def test_quality_gates_wait_for_minimum_and_then_stop_bad_outputs() -> None:
     gates = LocalRunQualityGates(minimum_observations=100)
     records = [_record(event_type="other", label="neutral") for _ in range(99)]
-    assert not _gate_failures(
-        records, [], elapsed_seconds=1.0, total_articles=5000, gates=gates
-    )
+    assert not _gate_failures(records, [], elapsed_seconds=1.0, total_articles=5000, gates=gates)
     records.append(_record(event_type="other", label="neutral"))
-    problems = _gate_failures(
-        records, [], elapsed_seconds=1.0, total_articles=5000, gates=gates
-    )
+    problems = _gate_failures(records, [], elapsed_seconds=1.0, total_articles=5000, gates=gates)
     assert any("other event type" in value for value in problems)
     assert any("neutral label share" in value for value in problems)
+
+
+def test_classification_row_excludes_execution_state() -> None:
+    row = _row(_record())
+    assert "from_cache" not in row
+    assert "prompt_tokens" not in row
+    assert "output_tokens" not in row
+    assert "total_duration_ns" not in row
+    assert "eval_duration_ns" not in row
+    assert row["sentiment_label"] == "bullish"
 
 
 def test_local_run_config_rejects_unknown_fields(tmp_path: Path) -> None:

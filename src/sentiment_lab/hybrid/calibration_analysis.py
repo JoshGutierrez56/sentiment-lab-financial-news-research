@@ -55,11 +55,9 @@ def _predictive_metrics(
             f"{prefix}_abstain": "abstain",
         }
     ).with_columns(
-        (
-            pl.col("sentiment_score")
-            * pl.col("confidence")
-            * pl.col("materiality")
-        ).alias("sentiment_confidence_materiality")
+        (pl.col("sentiment_score") * pl.col("confidence") * pl.col("materiality")).alias(
+            "sentiment_confidence_materiality"
+        )
     )
     return {
         split: {
@@ -119,9 +117,7 @@ def run_calibration_analysis(
         splits, on="article_id", validate="1:1"
     )
     split_minimums = {
-        split: all_split_dates.filter(pl.col("research_split") == split)[
-            "entry_date"
-        ].min()
+        split: all_split_dates.filter(pl.col("research_split") == split)["entry_date"].min()
         for split in ("development", "validation", "holdout")
     }
     common = [
@@ -171,22 +167,13 @@ def run_calibration_analysis(
         "bullish_bearish_directional": None,
         "bullish_bearish_overlap_n": 0,
         "tradable": float(
-            np.mean(
-                frame["local_tradable"].to_numpy()
-                == frame["openai_tradable"].to_numpy()
-            )
+            np.mean(frame["local_tradable"].to_numpy() == frame["openai_tradable"].to_numpy())
         ),
         "abstain": float(
-            np.mean(
-                frame["local_abstain"].to_numpy()
-                == frame["openai_abstain"].to_numpy()
-            )
+            np.mean(frame["local_abstain"].to_numpy() == frame["openai_abstain"].to_numpy())
         ),
         "event_type": float(
-            np.mean(
-                frame["local_event_type"].to_numpy()
-                == frame["openai_event_type"].to_numpy()
-            )
+            np.mean(frame["local_event_type"].to_numpy() == frame["openai_event_type"].to_numpy())
         ),
     }
     local_labels = frame["local_sentiment_label"].to_numpy()
@@ -237,9 +224,7 @@ def run_calibration_analysis(
         },
         "input_hashes": config.expected_hashes,
     }
-    config_hash = hashlib.sha256(
-        stable_json(config.model_dump(mode="json")).encode()
-    ).hexdigest()
+    config_hash = hashlib.sha256(stable_json(config.model_dump(mode="json")).encode()).hexdigest()
     metrics["config_hash"] = config_hash
     root = data_root / "results" / f"calibration_analysis_{config_hash[:16]}"
     store = ArtifactStore(data_root, duckdb_path)

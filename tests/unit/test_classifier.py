@@ -229,9 +229,7 @@ def test_budget_limited_escalation_prioritizes_material_events(tmp_path: Path) -
 
     articles = [low_confidence, earnings, high_materiality]
     gateway = FakeBatchGateway(articles, factory)
-    targets = [
-        ClassificationTarget(article, "AAPL.US", "Apple Inc.") for article in articles
-    ]
+    targets = [ClassificationTarget(article, "AAPL.US", "Apple Inc.") for article in articles]
     result = _classifier(tmp_path, gateway).classify_targets(
         targets,
         prompt_variant="evidence_v2",

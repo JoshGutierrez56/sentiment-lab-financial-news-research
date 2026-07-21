@@ -90,12 +90,16 @@ def test_invalid_first_attempt_is_repaired_and_accounted(tmp_path: Path) -> None
     def handler(_request: httpx.Request) -> httpx.Response:
         nonlocal calls
         calls += 1
-        content = "not-json" if calls == 1 else (
-            '{"sentiment_score":0.0,"sentiment_label":"neutral",'
-            '"confidence":0.5,"relevance":0.5,"materiality":0.1,"novelty":0.1,'
-            '"event_type":"other","expected_horizon":"1d","tradable":false,'
-            '"abstain":true,"abstain_reason":"Insufficient information.",'
-            '"concise_reasoning":"No material company-specific event."}'
+        content = (
+            "not-json"
+            if calls == 1
+            else (
+                '{"sentiment_score":0.0,"sentiment_label":"neutral",'
+                '"confidence":0.5,"relevance":0.5,"materiality":0.1,"novelty":0.1,'
+                '"event_type":"other","expected_horizon":"1d","tradable":false,'
+                '"abstain":true,"abstain_reason":"Insufficient information.",'
+                '"concise_reasoning":"No material company-specific event."}'
+            )
         )
         return httpx.Response(
             200,
