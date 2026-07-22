@@ -1,0 +1,156 @@
+study:
+  id: expectation-adjusted-news-v0
+  title: Expectation-Adjusted Company News
+  created_at: 2026-07-21T20:07:46-04:00
+  status: design_only_not_frozen
+  evidence_stage: protocol
+  prior_holdout_policy: prohibited_for_confirmatory_claims
+  results_available: false
+
+research_question: >-
+  Does financial-news interpretation add incremental out-of-sample information
+  beyond point-in-time expectations, fundamentals, price controls, and event type?
+
+scope:
+  asset_class: us_common_equity
+  primary_event_types:
+    - earnings
+    - guidance
+    - analyst_revision
+  sampling_policy: all_eligible_events_after_entity_and_timestamp_validation
+  universe: to_be_frozen_after_source_entitlement_and_history_audit
+  minimum_price_usd: 5.0
+  minimum_average_dollar_volume_20d_usd: 10000000
+
+required_inputs:
+  company_actuals:
+    path: null
+    sha256: null
+    point_in_time_field: available_at
+  expectation_snapshots:
+    path: null
+    sha256: null
+    point_in_time_field: available_at
+    entitlement_required: true
+  news:
+    path: null
+    sha256: null
+    point_in_time_field: available_at
+  controls:
+    path: null
+    sha256: null
+    point_in_time_field: available_at
+  prices_and_volume:
+    path: null
+    sha256: null
+    point_in_time_field: available_at
+  factor_returns:
+    path: null
+    sha256: null
+    point_in_time_field: available_at
+
+timestamp_contract:
+  expectation_rule: expectation_available_at_strictly_before_event_announced_at
+  controls_rule: controls_available_at_strictly_before_event_announced_at
+  decision_time: maximum_of_actual_available_at_and_news_available_at
+  entry: first_adjusted_market_open_strictly_after_decision_time
+  provider_revisions: immutable_snapshots_only
+  timezone_storage: utc
+
+targets:
+  primary:
+    name: factor_residual_return_5_sessions
+    holding_sessions: 5
+  diagnostics:
+    - factor_residual_return_1_session
+    - factor_residual_return_21_sessions
+  overlap_policy: purge_training_outcomes_reaching_next_split
+
+feature_families:
+  price_only:
+    - momentum_12_1
+    - reversal_1m
+    - market_beta
+    - idiosyncratic_volatility
+    - average_dollar_volume_20d
+  fundamentals_only:
+    - standardized_actual_minus_expectation
+    - expectation_dispersion
+    - analyst_contributor_count
+    - book_to_market
+    - return_on_equity
+    - asset_growth
+  event_type_only:
+    - event_type
+    - sector
+    - fiscal_period
+  text_only:
+    - company_specificity
+    - materiality
+    - novelty
+    - directional_surprise
+    - abstention
+  combined:
+    - price_only
+    - fundamentals_only
+    - event_type_only
+    - text_only
+
+modeling:
+  primary_model: regularized_linear_model
+  hyperparameter_selection: development_only_purged_walk_forward
+  missingness: explicit_indicators_and_development_only_imputation
+  scaling: development_only
+  random_seed: 20260721
+  prohibited:
+    - feature_selection_using_prospective_holdout
+    - threshold_selection_using_prospective_holdout
+    - prompt_revision_using_prospective_holdout
+
+evaluation:
+  splits:
+    development: historical_period_to_be_frozen
+    validation: historical_period_to_be_frozen
+    prospective_holdout: observations_available_only_after_specification_freeze
+  nested_baselines:
+    - price_only
+    - fundamentals_only
+    - event_type_only
+    - text_only
+    - combined
+  primary_incremental_test: combined_minus_best_non_text_baseline_ic
+  dependence_adjustment: date_block_bootstrap
+  multiple_testing: benjamini_hochberg_for_declared_secondary_tests
+
+portfolio:
+  starting_capital_usd: 1000000
+  position_weight: 0.02
+  maximum_long_exposure: 0.5
+  maximum_short_exposure: 0.5
+  maximum_gross_exposure: 1.0
+  maximum_volume_participation: 0.01
+  no_same_ticker_overlap: true
+  cost_model: reuse_stateful_decomposed_execution_engine
+  cost_scenarios:
+    - base
+    - conservative
+
+promotion_gates:
+  minimum_prospective_trades: 100
+  minimum_incremental_ic: 0.0
+  require_incremental_ic_bootstrap_lower_above_zero: true
+  minimum_base_net_sharpe: 0.75
+  require_base_sharpe_bootstrap_lower_above_zero: true
+  minimum_conservative_net_sharpe: 0.0
+  maximum_single_ticker_absolute_pnl_share: 0.10
+  maximum_single_sector_absolute_pnl_share: 0.25
+
+freeze_requirements:
+  - authorized_source_and_entitlement_audit
+  - exact_universe_and_date_boundaries
+  - immutable_input_snapshot_hashes
+  - metric_normalization_dictionary
+  - point_in_time_join_test_suite
+  - factor_model_definition
+  - cost_parameters_and_promotion_gates
+  - signed_configuration_hash

@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Start the design-only expectation-adjusted news study with a strict
+  point-in-time schema, nested quantamental baselines, prospective-holdout
+  prohibition, promotion gates, and an implementation ownership checklist.
 - Begin the OpenAI + EODHD rebuild on `agent/openai-eodhd-rebuild`.
 - Add the repository audit and milestone-first implementation plan.
 - Add modern Python packaging and strict configuration for the focused

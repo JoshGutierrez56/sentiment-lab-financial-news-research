@@ -72,8 +72,15 @@ The repository preserves three distinct stages rather than overwriting earlier e
 1. **OpenAI calibration (250 articles).** Operational validation and comparison dataset; not large enough for a trading conclusion.
 2. **Generic sentiment study (5,000 articles).** Qwen structured sentiment evaluated against forward returns and explicit daily portfolios. Gross five-session performance did not survive costs.
 3. **Event-surprise redesign (5,000 articles).** Sparse surprise-relative-to-expectations signal, development-only edge calibration, a 2x cost hurdle, purged boundaries, and one frozen stateful retrospective. It was not promoted.
+4. **Expectation-adjusted news (design only).** A new protocol will test whether text adds incremental information beyond point-in-time consensus, reported actuals, fundamentals, price controls, and event type. It has not been frozen or run and has no results.
 
 The final redesign did not rewrite the old strategy or tune it until it passed. A pre-canonical verification run did expose a split-boundary implementation defect: the earlier split retained its boundary day while valid terminal-holdout exits were discarded. The runner was mechanically corrected to purge outcomes reaching the next split and retain complete terminal paths. No horizon, signal threshold, weight, cost assumption, model, or promotion gate changed in response to performance.
+
+The next study is intentionally isolated from that viewed holdout. Read the
+[expectation-adjusted news protocol](docs/EXPECTATION_ADJUSTED_NEWS_PROTOCOL.md)
+and its [design-only configuration](config/experiments/expectation_adjusted_news_v0.yaml).
+Its first deliverable is a point-in-time data and ownership contract—not a new
+Sharpe ratio.
 
 ## Method summary
 
@@ -139,6 +146,7 @@ Canonical configuration SHA-256: `3b45aad9a1774ad53d5f325185b66a13012a2a1296ceff
 | Path | Purpose |
 |---|---|
 | `src/sentiment_lab/event_surprise/` | Strict event schema, signal construction, frozen portfolio retrospective |
+| `src/sentiment_lab/expectation_adjusted/` | Point-in-time actual, expectation, control, and study-observation contracts |
 | `src/sentiment_lab/execution/` | Stateful execution and decomposed cost models |
 | `src/sentiment_lab/hybrid/` | Sampling, local inference, calibration, baselines, portfolios, and reporting |
 | `src/sentiment_lab/validation/` | Purged walk-forward validation primitives |
