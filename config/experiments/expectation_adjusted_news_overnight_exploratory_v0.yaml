@@ -1,0 +1,144 @@
+study:
+  id: expectation-adjusted-news-overnight-exploratory-v0
+  title: Expectation-Adjusted News Overnight Exploratory Benchmark
+  created_at: 2026-07-21T21:05:00-04:00
+  status: exploratory_historical_locked_not_confirmatory
+  evidence_stage: locked_historical_exploratory
+  prior_holdout_policy: prior_2022_2026_news_holdout_already_viewed
+  production_or_alpha_claims_permitted: false
+  results_available_at_freeze: false
+  random_seed: 20260721
+
+immutable_inputs:
+  source_repo: C:/Users/Owner/.graphify/repos/JoshGutierrez56/DeepSeek-Generative-AI-Sentiment-Analysis-Algorithm
+  articles:
+    path: data/normalized/hybrid_5000/7b07079fb2bcbf7546e1dd810ee081ddb86adb7bb37aa0979efac31fe30553a7/articles.parquet
+    sha256: 8ada422fcdefa894c55ae51400e073f97fa6d8e26272cde98d8926ce27b68385
+    rows: 5000
+    distinct_article_ids: 5000
+    universe_ticker_count: 125
+    permitted_columns_for_universe_derivation:
+      - article_id
+      - ticker
+      - entry_date
+      - article_content_hash
+  prices:
+    path: data/normalized/hybrid_5000/7b07079fb2bcbf7546e1dd810ee081ddb86adb7bb37aa0979efac31fe30553a7/prices.parquet
+    sha256: 4f030c49deea3dd536dcb4d06f3b41d8447492ebfae2370d3646bb615ce79615
+  cached_text_signals:
+    path: data/derived/event_surprise_v1/post_completion_5000/event_surprise_company_day_signals.parquet
+    sha256: 79b60edce36d69e6302d46c56143fd6a4180dea08fc3ed7d2253d377d2329ba6
+
+scope:
+  announcement_start: 2022-01-01
+  announcement_end_exclusive: 2026-01-01
+  development_end_inclusive: 2024-12-31
+  validation_start: 2025-01-01
+  validation_end_exclusive: 2026-01-01
+  data_vendor_scope: exact_distinct_tickers_from_immutable_5000_article_input_only
+  required_universe_ticker_count: 125
+  maximum_wrds_event_rows: 2500
+  cpu_only: true
+  prohibited_runtime_sources:
+    - ollama
+    - cuda
+    - transformers_or_torch_model_loading
+    - edgar_embedding_worker_or_monitor
+  licensed_outputs_root: data/private/expectation_adjusted_overnight
+  public_results_root: data/results/expectation_adjusted_overnight
+
+wrds_sources:
+  actuals_table: ibes.actu_epsus
+  consensus_table: ibes.statsumu_epsus
+  link_table: wrdsapps_link_crsp_ibes.ibcrsphist
+  split_table: crsp.dsf_v2
+  link_score_max: 1
+  metric: EPS
+  periodicity: QTR
+  currency: USD
+  announcement_date_field: anndats
+  activation_date_field: actdats
+  raw_time_policy: preserve_raw_ibes_times_without_assigning_utc
+  consensus_rule: latest_statpers_strictly_before_anndats
+  split_basis_rule: actual_unadjusted_times_cfacshr_at_statpers_div_cfacshr_at_report_date
+  required_surprise_fields:
+    - actual_on_consensus_share_basis
+    - mean_estimate
+    - actual_minus_mean_estimate
+    - estimate_dispersion
+    - contributor_count
+    - revision_count
+    - missingness_flags
+
+event_join:
+  deterministic_news_match: >-
+    first cached article for the same ticker whose America/New_York calendar
+    date is strictly after max(anndats, actdats) and no more than two calendar
+    days later
+  ibes_time_semantics_assumption: no_utc_assignment_to_raw_ibes_times
+  entry_clock: matched_cached_article_entry_date
+  target: five_session_return_residualized_by_equal_weight_125_name_universe_return_same_entry_date
+  boundary_policy: purge_five_session_outcomes_reaching_a_split_boundary
+
+modeling:
+  estimator: ridge_regression
+  ridge_alpha: 1.0
+  standardization: development_only
+  imputation: development_only_with_missingness_indicators
+  nested_models:
+    price_only:
+      feature_groups:
+        - price
+    expectations_fundamentals_only:
+      feature_groups:
+        - expectations
+        - fundamentals
+    sector_calendar_only:
+      feature_groups:
+        - sector
+        - calendar
+    cached_text_only:
+      feature_groups:
+        - cached_text
+    combined:
+      feature_groups:
+        - price
+        - expectations
+        - fundamentals
+        - sector
+        - calendar
+        - cached_text
+
+evaluation:
+  primary_statistic: validation_spearman_ic
+  incremental_statistic: combined_minus_best_nontext_validation_spearman_ic
+  bootstrap:
+    method: date_block
+    draws: 2000
+    seed: 20260721
+  minimum_coverage_gate:
+    matched_observations_total: 100
+    validation_observations: 40
+    distinct_validation_entry_dates: 20
+  stop_if_coverage_gate_unmet: true
+  portfolio_policy: >-
+    run only if the existing stateful execution and cost machinery can be
+    reused without changing economic assumptions; otherwise report predictive
+    results only
+
+reporting:
+  required_label: exploratory_historical_locked_not_confirmatory
+  forbidden_claims:
+    - untouched
+    - prospective
+    - promoted
+    - successful
+    - production-ready
+    - deployable alpha
+  suppress_from_logs_and_git:
+    - credentials
+    - pgpass_content
+    - licensed_wrds_rows
+    - raw_article_text
+    - company_level_eps_values
+    - per_security_predictions
