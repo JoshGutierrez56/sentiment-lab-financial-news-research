@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- Start the design-only expectation-adjusted news study with a strict
+  point-in-time schema, nested quantamental baselines, prospective-holdout
+  prohibition, promotion gates, and an implementation ownership checklist.
+- Select WRDS I/B/E/S for a guarded 25-observation quarterly-EPS source audit;
+  add unadjusted actual/consensus extraction, high-quality historical CRSP
+  links, CRSP split-basis factors, private-output enforcement, and a manual
+  validation gate without computing performance.
 - Begin the OpenAI + EODHD rebuild on `agent/openai-eodhd-rebuild`.
 - Add the repository audit and milestone-first implementation plan.
 - Add modern Python packaging and strict configuration for the focused

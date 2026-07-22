@@ -1,0 +1,195 @@
+study:
+  id: expectation-adjusted-news-v0
+  title: Expectation-Adjusted Company News
+  created_at: 2026-07-21T20:07:46-04:00
+  status: design_only_not_frozen
+  evidence_stage: protocol
+  prior_holdout_policy: prohibited_for_confirmatory_claims
+  results_available: false
+
+research_question: >-
+  Does financial-news interpretation add incremental out-of-sample information
+  beyond point-in-time expectations, fundamentals, price controls, and event type?
+
+scope:
+  asset_class: us_common_equity
+  primary_event_types:
+    - earnings
+  primary_metric: quarterly_eps
+  later_event_types_after_separate_protocol:
+    - guidance
+    - analyst_revision
+  sampling_policy: all_eligible_events_after_entity_and_timestamp_validation
+  universe: to_be_frozen_after_source_entitlement_and_history_audit
+  minimum_price_usd: 5.0
+  minimum_average_dollar_volume_20d_usd: 10000000
+
+required_inputs:
+  company_actuals:
+    path: null
+    sha256: null
+    point_in_time_field: available_at
+  expectation_snapshots:
+    path: null
+    sha256: null
+    point_in_time_field: available_at
+    entitlement_required: true
+  news:
+    path: null
+    sha256: null
+    point_in_time_field: available_at
+  controls:
+    path: null
+    sha256: null
+    point_in_time_field: available_at
+  prices_and_volume:
+    path: null
+    sha256: null
+    point_in_time_field: available_at
+  factor_returns:
+    path: null
+    sha256: null
+    point_in_time_field: available_at
+
+expectations_source_contract:
+  status: selected_for_bounded_pilot_not_frozen
+  provider: WRDS I/B/E/S
+  entitlement: user_authorized_academic_access
+  metric: EPS
+  periodicity: QTR
+  currency: USD
+  tables:
+    unadjusted_actuals: ibes.actu_epsus
+    unadjusted_summary: ibes.statsumu_epsus
+    historical_ibes_crsp_link: wrdsapps_link_crsp_ibes.ibcrsphist
+    crsp_daily_split_factors: crsp.dsf_v2
+  actual_version_rule: earliest_activation_per_ticker_period_metric_periodicity
+  consensus_rule: latest_statpers_strictly_before_actual_anndats
+  link_rule: active_on_announcement_date_and_score_at_most_1
+  split_basis_rule: >-
+    actual_unadjusted * cfacshr_at_consensus_statpers / cfacshr_at_report_date
+  raw_time_zone_status: unresolved_preserve_without_utc_conversion
+  sources:
+    research_guide: >-
+      https://wrds-www.wharton.upenn.edu/pages/grid-items/ibes-wrds-101-introduction-and-research-guide/
+    unadjusted_data_note: >-
+      https://wrds-www.wharton.upenn.edu/documents/5/A_Note_on_IBES_Unadjusted_Data_pdf.pdf
+
+source_audit_pilot:
+  announcement_start: 2025-01-01
+  announcement_end_exclusive: 2026-01-01
+  maximum_events: 25
+  output_root: data/private/wrds_ibes_eps_pilot
+  git_commit_permitted: false
+  performance_metrics_permitted: false
+  required_manual_validation_observations: 1
+  scaling_requires_manual_validation_pass: true
+
+timestamp_contract:
+  expectation_rule: expectation_available_at_strictly_before_event_announced_at
+  controls_rule: controls_available_at_strictly_before_event_announced_at
+  decision_time: maximum_of_actual_available_at_and_news_available_at
+  entry: first_adjusted_market_open_strictly_after_decision_time
+  provider_revisions: immutable_snapshots_only
+  raw_vendor_time_zone: preserved_unconverted_pending_provider_documentation
+  normalized_timezone_storage: utc_after_source_time_zone_is_verified
+
+targets:
+  primary:
+    name: factor_residual_return_5_sessions
+    holding_sessions: 5
+  diagnostics:
+    - factor_residual_return_1_session
+    - factor_residual_return_21_sessions
+  overlap_policy: purge_training_outcomes_reaching_next_split
+
+feature_families:
+  price_only:
+    - momentum_12_1
+    - reversal_1m
+    - market_beta
+    - idiosyncratic_volatility
+    - average_dollar_volume_20d
+  fundamentals_only:
+    - standardized_actual_minus_expectation
+    - expectation_dispersion
+    - analyst_contributor_count
+    - book_to_market
+    - return_on_equity
+    - asset_growth
+  event_type_only:
+    - event_type
+    - sector
+    - fiscal_period
+  text_only:
+    - company_specificity
+    - materiality
+    - novelty
+    - directional_surprise
+    - abstention
+  combined:
+    - price_only
+    - fundamentals_only
+    - event_type_only
+    - text_only
+
+modeling:
+  primary_model: regularized_linear_model
+  hyperparameter_selection: development_only_purged_walk_forward
+  missingness: explicit_indicators_and_development_only_imputation
+  scaling: development_only
+  random_seed: 20260721
+  prohibited:
+    - feature_selection_using_prospective_holdout
+    - threshold_selection_using_prospective_holdout
+    - prompt_revision_using_prospective_holdout
+
+evaluation:
+  splits:
+    development: historical_period_to_be_frozen
+    validation: historical_period_to_be_frozen
+    prospective_holdout: observations_available_only_after_specification_freeze
+  nested_baselines:
+    - price_only
+    - fundamentals_only
+    - event_type_only
+    - text_only
+    - combined
+  primary_incremental_test: combined_minus_best_non_text_baseline_ic
+  dependence_adjustment: date_block_bootstrap
+  multiple_testing: benjamini_hochberg_for_declared_secondary_tests
+
+portfolio:
+  starting_capital_usd: 1000000
+  position_weight: 0.02
+  maximum_long_exposure: 0.5
+  maximum_short_exposure: 0.5
+  maximum_gross_exposure: 1.0
+  maximum_volume_participation: 0.01
+  no_same_ticker_overlap: true
+  cost_model: reuse_stateful_decomposed_execution_engine
+  cost_scenarios:
+    - base
+    - conservative
+
+promotion_gates:
+  minimum_prospective_trades: 100
+  minimum_incremental_ic: 0.0
+  require_incremental_ic_bootstrap_lower_above_zero: true
+  minimum_base_net_sharpe: 0.75
+  require_base_sharpe_bootstrap_lower_above_zero: true
+  minimum_conservative_net_sharpe: 0.0
+  maximum_single_ticker_absolute_pnl_share: 0.10
+  maximum_single_sector_absolute_pnl_share: 0.25
+
+freeze_requirements:
+  - authorized_source_and_entitlement_audit
+  - exact_universe_and_date_boundaries
+  - immutable_input_snapshot_hashes
+  - metric_normalization_dictionary
+  - point_in_time_join_test_suite
+  - provider_time_zone_semantics
+  - split_basis_validation_against_one_manual_observation
+  - factor_model_definition
+  - cost_parameters_and_promotion_gates
+  - signed_configuration_hash

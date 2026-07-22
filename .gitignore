@@ -27,6 +27,7 @@ data/normalized/**
 data/features/**
 data/derived/**
 data/results/**
+data/private/**
 data/*.duckdb*
 !data/raw/.gitkeep
 !data/normalized/.gitkeep

@@ -63,7 +63,7 @@ Read the complete [event-surprise retrospective](docs/EVENT_SURPRISE_RETROSPECTI
 - **Stateful execution:** same-ticker overlap suppression, side and gross exposure caps, volume participation limits, and auditable order/fill/rejection ledgers.
 - **Decomposed costs:** commissions, half-spread, slippage, nonlinear volume impact, short borrow, and a research-cost allocation are reported separately.
 - **Falsifiable promotion gates:** a strategy is closed when it fails rather than retuned on holdout.
-- **Reproducible engineering:** Ruff, strict mypy, a two-version GitHub Actions matrix, and 110 tests with an 85% coverage gate.
+- **Reproducible engineering:** Ruff, strict mypy, a two-version GitHub Actions matrix, and 132 tests with an 85% coverage gate.
 
 ## Research lineage
 
@@ -72,8 +72,21 @@ The repository preserves three distinct stages rather than overwriting earlier e
 1. **OpenAI calibration (250 articles).** Operational validation and comparison dataset; not large enough for a trading conclusion.
 2. **Generic sentiment study (5,000 articles).** Qwen structured sentiment evaluated against forward returns and explicit daily portfolios. Gross five-session performance did not survive costs.
 3. **Event-surprise redesign (5,000 articles).** Sparse surprise-relative-to-expectations signal, development-only edge calibration, a 2x cost hurdle, purged boundaries, and one frozen stateful retrospective. It was not promoted.
+4. **Expectation-adjusted news (design only).** A new protocol will test whether text adds incremental information beyond point-in-time consensus, reported actuals, fundamentals, price controls, and event type. It has not been frozen or run and has no results.
 
 The final redesign did not rewrite the old strategy or tune it until it passed. A pre-canonical verification run did expose a split-boundary implementation defect: the earlier split retained its boundary day while valid terminal-holdout exits were discarded. The runner was mechanically corrected to purge outcomes reaching the next split and retain complete terminal paths. No horizon, signal threshold, weight, cost assumption, model, or promotion gate changed in response to performance.
+
+The next study is intentionally isolated from that viewed holdout. Read the
+[expectation-adjusted news protocol](docs/EXPECTATION_ADJUSTED_NEWS_PROTOCOL.md)
+and its [design-only configuration](config/experiments/expectation_adjusted_news_v0.yaml).
+Its first deliverable is a point-in-time data and ownership contract—not a new
+Sharpe ratio.
+
+The first source audit now has an exact WRDS contract: unadjusted quarterly EPS
+actuals and consensus snapshots are linked to CRSP and reconciled across stock
+splits using contemporaneous cumulative share factors. The guarded runner is
+hard-capped at 25 private observations and computes no performance metrics. See
+the [WRDS I/B/E/S EPS pilot runbook](docs/WRDS_IBES_EPS_PILOT.md).
 
 ## Method summary
 
@@ -139,6 +152,7 @@ Canonical configuration SHA-256: `3b45aad9a1774ad53d5f325185b66a13012a2a1296ceff
 | Path | Purpose |
 |---|---|
 | `src/sentiment_lab/event_surprise/` | Strict event schema, signal construction, frozen portfolio retrospective |
+| `src/sentiment_lab/expectation_adjusted/` | Point-in-time actual, expectation, control, and study-observation contracts |
 | `src/sentiment_lab/execution/` | Stateful execution and decomposed cost models |
 | `src/sentiment_lab/hybrid/` | Sampling, local inference, calibration, baselines, portfolios, and reporting |
 | `src/sentiment_lab/validation/` | Purged walk-forward validation primitives |
