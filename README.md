@@ -63,7 +63,7 @@ Read the complete [event-surprise retrospective](docs/EVENT_SURPRISE_RETROSPECTI
 - **Stateful execution:** same-ticker overlap suppression, side and gross exposure caps, volume participation limits, and auditable order/fill/rejection ledgers.
 - **Decomposed costs:** commissions, half-spread, slippage, nonlinear volume impact, short borrow, and a research-cost allocation are reported separately.
 - **Falsifiable promotion gates:** a strategy is closed when it fails rather than retuned on holdout.
-- **Reproducible engineering:** Ruff, strict mypy, a two-version GitHub Actions matrix, and 110 tests with an 85% coverage gate.
+- **Reproducible engineering:** Ruff, strict mypy, a two-version GitHub Actions matrix, and 132 tests with an 85% coverage gate.
 
 ## Research lineage
 
@@ -81,6 +81,12 @@ The next study is intentionally isolated from that viewed holdout. Read the
 and its [design-only configuration](config/experiments/expectation_adjusted_news_v0.yaml).
 Its first deliverable is a point-in-time data and ownership contract—not a new
 Sharpe ratio.
+
+The first source audit now has an exact WRDS contract: unadjusted quarterly EPS
+actuals and consensus snapshots are linked to CRSP and reconciled across stock
+splits using contemporaneous cumulative share factors. The guarded runner is
+hard-capped at 25 private observations and computes no performance metrics. See
+the [WRDS I/B/E/S EPS pilot runbook](docs/WRDS_IBES_EPS_PILOT.md).
 
 ## Method summary
 

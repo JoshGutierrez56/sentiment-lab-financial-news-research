@@ -24,10 +24,11 @@ fundamental controls, price controls, event type, and structured text features
 produce incremental out-of-sample information beyond the strongest comparable
 non-text baseline?
 
-The primary economic unit is an eligible company event, initially restricted to
-earnings, guidance, and analyst revisions. A narrow event universe makes the
-meaning of “expected” auditable instead of asking a language model to infer the
-market's full information set.
+The primary economic unit for version 1 is a U.S. company's quarterly EPS
+announcement. Guidance and analyst revisions require different definitions of
+the actual, expectation, and decision clock, so they are deferred to separate
+protocols. This narrow event universe makes the meaning of “expected” auditable
+instead of asking a language model to infer the market's full information set.
 
 ## Falsifiable hypotheses
 
@@ -61,6 +62,50 @@ The typed contract is implemented in
 [`src/sentiment_lab/expectation_adjusted/schemas.py`](../src/sentiment_lab/expectation_adjusted/schemas.py).
 It rejects expectations or control records that became available at or after
 the event announcement.
+
+### Selected expectations source and pilot
+
+The bounded source audit uses authorized WRDS access to four tables:
+
+| Purpose | Table | Fields that establish the contract |
+|---|---|---|
+| Unadjusted quarterly EPS actual | `ibes.actu_epsus` | `pends`, `anndats`, `anntims`, `actdats`, `acttims`, `value`, `curr_act` |
+| Unadjusted consensus snapshot | `ibes.statsumu_epsus` | `statpers`, `fpedats`, `meanest`, `medest`, `stdev`, `numest`, `curcode` |
+| Historical security link | `wrdsapps_link_crsp_ibes.ibcrsphist` | `ticker`, `permno`, `sdate`, `edate`, `score` |
+| Split basis | `crsp.dsf_v2` | `permno`, `dlycaldt`, `dlycumfacshr` |
+
+For the pilot, the consensus is the latest `statsumu_epsus` observation whose
+`statpers` is **strictly earlier** than the actual's `anndats`. The historical
+I/B/E/S-to-CRSP link must be effective on the announcement date and have a link
+score no greater than 1. The query selects USD, U.S.-file, quarterly EPS rows
+only and retains the earliest activation when duplicate actual versions exist.
+
+I/B/E/S unadjusted estimates and actuals can refer to different share bases
+when a split occurs between the consensus date and earnings report. Following
+Method 3 in WRDS's *A Note on IBES Unadjusted Data*, the actual placed on the
+consensus share basis is:
+
+```text
+actual_unadjusted
+× CRSP cfacshr at consensus statistical period
+÷ CRSP cfacshr at report date
+```
+
+The adapter collects both factors but does not calculate returns, IC, Sharpe,
+or a portfolio. One observation must be derived manually before the pilot may
+scale. WRDS's database catalog labels the raw announcement and activation
+times, but it does not document their time zone. The pilot therefore preserves
+those raw fields without assigning UTC. A normalized study row cannot be built
+until the provider time-zone convention has been documented and tested.
+
+Licensed observations are limited to 25 and written only beneath
+`data/private/wrds_ibes_eps_pilot`, which is ignored by Git. The runner requires
+both `--live` and the explicit `SENTIMENT_LAB_ENABLE_LIVE_WRDS_IBES=1` gate. The
+password remains in PostgreSQL's password file and is never accepted as a
+command-line argument.
+
+See the [WRDS I/B/E/S pilot runbook](WRDS_IBES_EPS_PILOT.md) for the exact safe
+workflow and the official WRDS references.
 
 ## Surprise definitions
 
@@ -135,8 +180,9 @@ rules, and input hashes are frozen together.
 
 ## Required decisions before freeze
 
-1. Confirm an authorized point-in-time expectations source and its revision
-   semantics. A current consensus value backfilled historically is invalid.
+1. Finish the WRDS I/B/E/S source audit: manually validate one split-adjusted
+   observation, document raw time-zone semantics, and freeze revision rules. A
+   current consensus value backfilled historically is invalid.
 2. Freeze the eligible security universe, event metrics, fiscal-period mapping,
    and exact historical development/validation dates.
 3. Freeze the factor model and residual-return construction.

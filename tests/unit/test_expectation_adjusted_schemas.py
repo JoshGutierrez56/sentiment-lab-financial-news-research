@@ -138,3 +138,14 @@ def test_design_config_cannot_masquerade_as_confirmatory_evidence() -> None:
         == "observations_available_only_after_specification_freeze"
     )
     assert "feature_selection_using_prospective_holdout" in config["modeling"]["prohibited"]
+    source = config["expectations_source_contract"]
+    assert source["status"] == "selected_for_bounded_pilot_not_frozen"
+    assert source["tables"] == {
+        "unadjusted_actuals": "ibes.actu_epsus",
+        "unadjusted_summary": "ibes.statsumu_epsus",
+        "historical_ibes_crsp_link": "wrdsapps_link_crsp_ibes.ibcrsphist",
+        "crsp_daily_split_factors": "crsp.dsf_v2",
+    }
+    assert source["consensus_rule"] == "latest_statpers_strictly_before_actual_anndats"
+    assert config["source_audit_pilot"]["maximum_events"] == 25
+    assert config["source_audit_pilot"]["performance_metrics_permitted"] is False

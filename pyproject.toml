@@ -32,6 +32,9 @@ finbert = [
   "torch>=2.4,<3",
   "transformers>=4.44,<5",
 ]
+wrds = [
+  "wrds>=3.3,<4",
+]
 dev = [
   "mypy>=1.12,<2",
   "pytest>=8.3,<9",
