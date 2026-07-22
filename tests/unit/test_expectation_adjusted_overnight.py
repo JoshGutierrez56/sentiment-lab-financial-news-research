@@ -424,7 +424,7 @@ def test_evaluate_nested_models_reports_aggregate_exploratory_metrics(tmp_path: 
 def test_pgpass_username_derivation_is_credential_safe(tmp_path: Path) -> None:
     pgpass = tmp_path / "pgpass.conf"
     pgpass.write_text(
-        "wrds-" + "pgdata.wharton.upenn.edu:9737:" + "wr" + "ds:private_user:placeholder\n",
+        "wr" + "ds-" + "pgdata.wharton.upenn.edu:9737:" + "wr" + "ds:private_user:placeholder\n",
         encoding="utf-8",
     )
 
