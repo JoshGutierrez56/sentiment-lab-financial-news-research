@@ -1,0 +1,264 @@
+study:
+  id: expectation-adjusted-news-overnight-exploratory-v0
+  title: Expectation-Adjusted News Overnight Exploratory Benchmark
+  created_at: 2026-07-21T21:04:00-04:00
+  status: exploratory_historical_locked_not_confirmatory
+  evidence_stage: locked_historical_exploratory_benchmark
+  confirmatory_status: prohibited
+  deployable_alpha_claims_permitted: false
+  prior_holdout_viewed: true
+  prior_holdout_policy: prior_2022_2026_news_holdout_viewed_no_prospective_claims
+
+scope:
+  label: exploratory_historical_locked_not_confirmatory
+  source_event_window:
+    start: 2022-01-01
+    end_exclusive: 2026-01-01
+  development_entries:
+    end_inclusive: 2024-12-31
+  validation_entries:
+    start: 2025-01-01
+    end_inclusive: 2025-12-31
+  five_session_boundary_policy: purge_outcomes_reaching_split_boundary
+  cpu_only: true
+  prohibited_runtime:
+    - ollama
+    - cuda
+    - torch_transformers_model_loading
+    - edgar_embedding_worker_interruption
+  network_sources_allowed:
+    - authorized_wrds
+    - public_github_reference_pages
+
+immutable_inputs:
+  original_repo: C:/Users/Owner/.graphify/repos/JoshGutierrez56/DeepSeek-Generative-AI-Sentiment-Analysis-Algorithm
+  articles:
+    path: data/normalized/hybrid_5000/7b07079fb2bcbf7546e1dd810ee081ddb86adb7bb37aa0979efac31fe30553a7/articles.parquet
+    sha256: 8ada422fcdefa894c55ae51400e073f97fa6d8e26272cde98d8926ce27b68385
+  prices:
+    path: data/normalized/hybrid_5000/7b07079fb2bcbf7546e1dd810ee081ddb86adb7bb37aa0979efac31fe30553a7/prices.parquet
+    sha256: 4f030c49deea3dd536dcb4d06f3b41d8447492ebfae2370d3646bb615ce79615
+  cached_text_signals:
+    path: data/derived/event_surprise_v1/post_completion_5000/event_surprise_company_day_signals.parquet
+    sha256: 79b60edce36d69e6302d46c56143fd6a4180dea08fc3ed7d2253d377d2329ba6
+
+universe:
+  derivation: distinct_uppercase_ticker_from_immutable_5000_article_input
+  count: 125
+  ticker_list_sha256: 649112c580450cedd122e349349f1920fc1fea4f28cb1603c7970992d9ca60c3
+  tickers:
+    - AAPL.US
+    - ABBV.US
+    - ABT.US
+    - ACN.US
+    - ADBE.US
+    - AEP.US
+    - AMD.US
+    - AMGN.US
+    - AMT.US
+    - AMZN.US
+    - APD.US
+    - AVGO.US
+    - AXP.US
+    - BA.US
+    - BAC.US
+    - BKNG.US
+    - BLK.US
+    - BSX.US
+    - C.US
+    - CAT.US
+    - CHTR.US
+    - CL.US
+    - CMCSA.US
+    - CME.US
+    - COF.US
+    - COP.US
+    - COST.US
+    - CRM.US
+    - CSCO.US
+    - CVS.US
+    - CVX.US
+    - DE.US
+    - DHR.US
+    - DIS.US
+    - DOW.US
+    - DUK.US
+    - EA.US
+    - ECL.US
+    - ED.US
+    - EL.US
+    - EOG.US
+    - EQIX.US
+    - ETN.US
+    - EXC.US
+    - F.US
+    - FCX.US
+    - GD.US
+    - GE.US
+    - GILD.US
+    - GM.US
+    - GOOGL.US
+    - GS.US
+    - HD.US
+    - HON.US
+    - IBM.US
+    - ICE.US
+    - INTU.US
+    - ISRG.US
+    - JPM.US
+    - KMI.US
+    - KO.US
+    - LIN.US
+    - LLY.US
+    - LMT.US
+    - LOW.US
+    - MA.US
+    - MCD.US
+    - MDLZ.US
+    - MDT.US
+    - META.US
+    - MMM.US
+    - MO.US
+    - MPC.US
+    - MRK.US
+    - MS.US
+    - MSFT.US
+    - NEE.US
+    - NEM.US
+    - NFLX.US
+    - NKE.US
+    - NOC.US
+    - NOW.US
+    - NUE.US
+    - NVDA.US
+    - O.US
+    - ORCL.US
+    - ORLY.US
+    - OXY.US
+    - PEP.US
+    - PFE.US
+    - PG.US
+    - PGR.US
+    - PH.US
+    - PLD.US
+    - PM.US
+    - PSA.US
+    - PSX.US
+    - QCOM.US
+    - RTX.US
+    - SBUX.US
+    - SCHW.US
+    - SHW.US
+    - SLB.US
+    - SO.US
+    - SPG.US
+    - SRE.US
+    - SYK.US
+    - TJX.US
+    - TMO.US
+    - TMUS.US
+    - TSLA.US
+    - TXN.US
+    - UNH.US
+    - UNP.US
+    - UPS.US
+    - V.US
+    - VZ.US
+    - WBD.US
+    - WELL.US
+    - WFC.US
+    - WM.US
+    - WMB.US
+    - WMT.US
+    - XEL.US
+    - XOM.US
+
+wrds:
+  hard_scope:
+    tickers: exact_distinct_tickers_in_immutable_5000_article_dataset
+    announcements_start: 2022-01-01
+    announcements_end_exclusive: 2026-01-01
+    quarterly_eps_usd_only: true
+    max_resulting_event_rows: 2500
+  sources:
+    actuals: ibes.actu_epsus
+    consensus: ibes.statsumu_epsus
+    link: wrdsapps_link_crsp_ibes.ibcrsphist
+    split_factors: crsp.dsf_v2
+  link_rule: active_on_announcement_date_score_at_most_1
+  consensus_rule: latest_statpers_strictly_before_anndats
+  raw_time_rule: preserve_raw_ibes_dates_and_times_without_assigning_utc
+  news_match_rule: first_cached_article_same_ticker_with_new_york_date_strictly_after_max_anndats_actdats_and_no_more_than_two_calendar_days_later
+  split_basis_rule: actual_unadjusted_times_dlycumfacshr_at_statpers_divided_by_dlycumfacshr_at_report_date
+  derived_fields:
+    - actual_on_consensus_basis
+    - eps_surprise
+    - dispersion
+    - contributor_count
+    - revisions_up
+    - revisions_down
+    - missingness_indicators
+
+modeling:
+  seed: 20260721
+  estimator: ridge
+  ridge_alpha: 1.0
+  transforms: development_only_standardization_imputation
+  nested_models:
+    price_only:
+      - lagged_return_5d
+      - lagged_return_21d
+      - volume_zscore_20d
+    expectations_fundamentals_only:
+      - eps_surprise
+      - standardized_eps_surprise
+      - dispersion
+      - contributor_count
+      - revisions_up
+      - revisions_down
+      - missingness_indicators
+    sector_calendar_only:
+      - sector
+      - entry_month
+      - entry_day_of_week
+    cached_text_only:
+      - cached_event_surprise_signal
+      - cached_llm_direction_score
+      - cached_finbert_score
+      - cached_materiality
+      - cached_novelty
+      - cached_abstain
+    combined:
+      - price_only
+      - expectations_fundamentals_only
+      - sector_calendar_only
+      - cached_text_only
+
+target:
+  primary: five_session_return_residualized_by_equal_weight_125_name_universe_return_same_entry_date
+  raw_return_column_source: immutable_articles_future_return_5d
+  universe_return_source: immutable_prices
+
+evaluation:
+  minimum_gate:
+    matched_observations_total: 100
+    validation_observations: 40
+    distinct_validation_entry_dates: 20
+    if_unmet: stop_at_coverage_do_not_fit_or_evaluate
+  primary_statistic:
+    - validation_spearman_ic
+    - combined_minus_best_nontext_validation_spearman_ic
+  uncertainty:
+    method: date_block_bootstrap
+    draws: 2000
+    seed: 20260721
+  portfolio:
+    status: secondary
+    permitted_only_if: existing_stateful_execution_cost_machinery_reused_without_economic_assumption_changes
+    otherwise: predictive_results_only
+
+outputs:
+  private_root: data/private/expectation_adjusted_overnight
+  results_root: data/results/expectation_adjusted_overnight
+  progress_json: data/private/expectation_adjusted_overnight/progress.json
+  report: docs/EXPECTATION_ADJUSTED_OVERNIGHT_EXPLORATORY_REPORT.md
