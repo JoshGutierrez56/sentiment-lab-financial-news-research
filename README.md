@@ -1,10 +1,29 @@
 # Sentiment Lab
 
+[![core-ci](https://github.com/JoshGutierrez56/sentiment-lab-financial-news-research/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/JoshGutierrez56/sentiment-lab-financial-news-research/actions/workflows/ci.yml)
+[![Python 3.11–3.12](https://img.shields.io/badge/python-3.11%E2%80%933.12-3776AB?logo=python&logoColor=white)](https://www.python.org/)
+[![License: MIT](https://img.shields.io/badge/license-MIT-2E7D32.svg)](LICENSE)
+
 Sentiment Lab is an evidence-first financial-news research pipeline. It joins full-text equity news to point-in-time market data, produces structured model assessments, and evaluates daily portfolios only after timestamps, data lineage, split boundaries, execution rules, and costs have been locked.
 
 The main result is negative and intentionally reported that way: **neither generic news sentiment nor the final event-surprise redesign was promoted as a standalone trading strategy.** The repository is useful as a reproducible research and model-risk case study—not as a claim of production alpha.
 
 > Research software only. Nothing in this repository is investment advice or a representation of live trading performance.
+
+## Research decision at a glance
+
+```mermaid
+flowchart LR
+    A[5,000 full-text articles] --> B[Point-in-time event alignment]
+    B --> C[Structured sentiment and event-surprise signals]
+    C --> D[Purged development / validation / holdout]
+    D --> E[Stateful portfolio and decomposed costs]
+    E --> F{Predeclared promotion gates}
+    F -->|Generic sentiment| G[Not promoted]
+    F -->|Event surprise| G
+```
+
+**Evidence status:** closed retrospective. Both specifications failed their frozen costed portfolio gates. The result supports a research-process and model-risk case study, not an alpha claim.
 
 ## Final results
 

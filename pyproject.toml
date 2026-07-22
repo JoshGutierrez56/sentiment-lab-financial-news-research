@@ -5,7 +5,7 @@ build-backend = "hatchling.build"
 [project]
 name = "sentiment-lab"
 version = "0.1.0"
-description = "Reproducible EODHD-to-OpenAI equity news sentiment research"
+description = "Evidence-first financial-news NLP research with point-in-time validation and costed portfolios"
 readme = "README.md"
 requires-python = ">=3.11"
 license = { file = "LICENSE" }
