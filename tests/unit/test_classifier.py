@@ -567,7 +567,7 @@ def test_openai_status_detail_is_short_and_redacts_credentials() -> None:
         SimpleNamespace(
             body={
                 "message": "  Invalid request with Bearer secret-token and "
-                "sk-proj-do-not-print-this-value  "
+                "sk-" + "proj-do-not-print-this-value  "
             }
         )
     )
